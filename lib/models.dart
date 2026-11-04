@@ -8,6 +8,7 @@ class DownloadItem {
   int total; // -1 = unknown
   int downloaded;
   bool rangeSupported;
+  Map<String, String> headers; // cookies / UA / referer from the browser
   DlStatus status;
   String? error;
 
@@ -22,6 +23,7 @@ class DownloadItem {
     this.total = -1,
     this.downloaded = 0,
     this.rangeSupported = false,
+    this.headers = const {},
     this.status = DlStatus.queued,
     this.error,
   });
@@ -39,6 +41,7 @@ class DownloadItem {
         'total': total,
         'downloaded': downloaded,
         'rangeSupported': rangeSupported,
+        'headers': headers,
         'status': status.name,
         'error': error,
       };
@@ -60,6 +63,8 @@ class DownloadItem {
       total: (j['total'] as num?)?.toInt() ?? -1,
       downloaded: (j['downloaded'] as num?)?.toInt() ?? 0,
       rangeSupported: j['rangeSupported'] as bool? ?? false,
+      headers: ((j['headers'] as Map?) ?? const {})
+          .map((k, v) => MapEntry(k.toString(), v.toString())),
       status: st,
       error: j['error'] as String?,
     );

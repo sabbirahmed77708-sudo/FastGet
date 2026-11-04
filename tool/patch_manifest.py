@@ -33,7 +33,7 @@ if "requestLegacyExternalStorage" not in xml:
     xml = xml.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
 
 # অ্যাপের নাম
-xml = re.sub(r'android:label="[^"]*"', 'android:label="FastGet"', xml, count=1)
+xml = re.sub(r'android:label="[^"]*"', 'android:label="DROX"', xml, count=1)
 
 with open(PATH, "w", encoding="utf-8") as f:
     f.write(xml)

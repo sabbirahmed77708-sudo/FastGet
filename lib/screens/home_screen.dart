@@ -5,12 +5,14 @@ import 'package:open_filex/open_filex.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
-import 'browser_screen.dart';
+import '../browser/browser_screen.dart';
 
 enum _Filter { all, active, completed }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  /// true when opened from the browser's "Downloads" menu entry.
+  final bool embedded;
+  const HomeScreen({super.key, this.embedded = false});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -118,11 +120,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openBrowser() async {
-    final url = await Navigator.push<String>(
+    await Navigator.push<void>(
       context,
       MaterialPageRoute(builder: (_) => const BrowserScreen()),
     );
-    if (url != null) await _add(url);
   }
 
   Future<void> _confirmRemove(DownloadItem d) async {
@@ -190,13 +191,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final items = _visible;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('FastGet'),
+        title: Text(widget.embedded ? 'Downloads' : 'DROX'),
         actions: [
-          IconButton.filledTonal(
-            tooltip: 'Browser',
-            icon: const Icon(Icons.explore_outlined),
-            onPressed: _openBrowser,
-          ),
+          if (!widget.embedded)
+            IconButton.filledTonal(
+              tooltip: 'Browser',
+              icon: const Icon(Icons.explore_outlined),
+              onPressed: _openBrowser,
+            ),
           const SizedBox(width: 12),
         ],
       ),

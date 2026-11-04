@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'browser/browser_controller.dart';
 import 'download_manager.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
@@ -7,6 +8,7 @@ import 'theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DownloadManager.instance.init();
+  await BrowserController.instance.init();
   runApp(const FastGetApp());
 }
 
@@ -15,13 +17,16 @@ class FastGetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FastGet',
-      debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      home: const HomeScreen(),
+    return ListenableBuilder(
+      listenable: BrowserController.instance,
+      builder: (context, _) => MaterialApp(
+        title: 'DROX',
+        debugShowCheckedModeBanner: false,
+        themeMode: BrowserController.instance.themeMode,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        home: const HomeScreen(),
+      ),
     );
   }
 }

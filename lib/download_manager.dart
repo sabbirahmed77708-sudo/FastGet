@@ -15,6 +15,25 @@ const String _ua =
     'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) '
     'Chrome/120.0 Mobile Safari/537.36';
 
+/// Result of inspecting a URL before downloading it.
+class ProbeResult {
+  final int total;
+  final bool range;
+  final String? fileName;
+  final String? contentType;
+  const ProbeResult(this.total, this.range, this.fileName, this.contentType);
+}
+
+bool _isHtmlType(String? ct) {
+  final c = (ct ?? '').toLowerCase();
+  return c.startsWith('text/html') || c.startsWith('application/xhtml');
+}
+
+bool _nameIsWebPage(String name) {
+  final n = name.toLowerCase();
+  return n.endsWith('.html') || n.endsWith('.htm') || n.endsWith('.xhtml');
+}
+
 class _Run {
   final CancelToken token = CancelToken();
   Timer? ticker;
@@ -89,15 +108,28 @@ class DownloadManager extends ChangeNotifier {
 
   // ----------------------------------------------------------------- add
 
-  Future<DownloadItem> addUrl(String rawUrl) async {
+  Future<DownloadItem> addUrl(String rawUrl,
+      {Map<String, String>? headers, String? suggestedName}) async {
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
       throw 'Enter a valid http/https link';
     }
     final dir = await downloadDir();
-    final probe = await _probe(url);
-    final name = _uniqueName(dir, probe.fileName ?? _nameFromUrl(uri));
+    final hdrs = headers ?? const <String, String>{};
+    final probe = await inspect(url, headers: hdrs);
+    final name = _uniqueName(
+        dir,
+        (suggestedName != null && suggestedName.trim().isNotEmpty
+                ? _sanitize(suggestedName)
+                : null) ??
+            probe.fileName ??
+            _nameFromUrl(uri));
+    if (probe.contentType != null &&
+        _isHtmlType(probe.contentType) &&
+        !_nameIsWebPage(name)) {
+      throw 'This link opens a web page, not a downloadable file';
+    }
     final item = DownloadItem(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
       url: url,
@@ -105,6 +137,7 @@ class DownloadManager extends ChangeNotifier {
       dirPath: dir,
       total: probe.total,
       rangeSupported: probe.range,
+      headers: hdrs,
     );
     items.insert(0, item);
     await _save();
@@ -157,7 +190,7 @@ class DownloadManager extends ChangeNotifier {
     try {
       // Re-probe if metadata is unknown
       if (item.total <= 0) {
-        final p = await _probe(item.url);
+        final p = await inspect(item.url, headers: item.headers);
         item.total = p.total;
         item.rangeSupported = p.range;
       }
@@ -262,13 +295,17 @@ class DownloadManager extends ChangeNotifier {
       item.url,
       options: Options(
         responseType: ResponseType.stream,
-        headers: {'Range': 'bytes=$from-$end'},
+        headers: {...item.headers, 'Range': 'bytes=$from-$end'},
         receiveTimeout: const Duration(seconds: 60),
       ),
       cancelToken: run.token,
     );
     if (resp.statusCode != 206) {
       throw 'Server did not honour Range request (${resp.statusCode})';
+    }
+    if (_isHtmlType(resp.headers.value('content-type')) &&
+        !_nameIsWebPage(item.fileName)) {
+      throw 'Server returned a web page instead of the file';
     }
 
     final sink = File(_partPath(item, index)).openWrite(mode: FileMode.append);
@@ -299,9 +336,14 @@ class DownloadManager extends ChangeNotifier {
 
     final resp = await _dio.get<ResponseBody>(
       item.url,
-      options: Options(responseType: ResponseType.stream),
+      options:
+          Options(responseType: ResponseType.stream, headers: item.headers),
       cancelToken: run.token,
     );
+    if (_isHtmlType(resp.headers.value('content-type')) &&
+        !_nameIsWebPage(item.fileName)) {
+      throw 'Server returned a web page instead of the file';
+    }
     final sink = part.openWrite();
     try {
       await for (final chunk in resp.data!.stream) {
@@ -313,6 +355,9 @@ class DownloadManager extends ChangeNotifier {
       await sink.close();
     }
 
+    if (item.total > 0 && await part.length() != item.total) {
+      throw 'Download incomplete (size mismatch)';
+    }
     final out = File(item.savePath);
     if (await out.exists()) await out.delete();
     await part.rename(item.savePath);
@@ -333,6 +378,18 @@ class DownloadManager extends ChangeNotifier {
     } finally {
       await sink.close();
     }
+    if (item.total > 0 && await out.length() != item.total) {
+      try {
+        await out.delete();
+      } catch (_) {}
+      for (var i = 0; i < kSegments; i++) {
+        try {
+          final f = File(_partPath(item, i));
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+      throw 'Download incomplete (size mismatch)';
+    }
     await _deleteParts(item);
   }
 
@@ -350,14 +407,17 @@ class DownloadManager extends ChangeNotifier {
 
   // ------------------------------------------------------------- helpers
 
-  Future<({int total, bool range, String? fileName})> _probe(String url) async {
+  /// Inspects [url] (without downloading the body): size, Range support,
+  /// file name and content type.
+  Future<ProbeResult> inspect(String url,
+      {Map<String, String>? headers}) async {
     final token = CancelToken();
     try {
       final resp = await _dio.get<ResponseBody>(
         url,
         options: Options(
           responseType: ResponseType.stream,
-          headers: {'Range': 'bytes=0-0'},
+          headers: {...?headers, 'Range': 'bytes=0-0'},
           validateStatus: (s) => s != null && s < 400,
         ),
         cancelToken: token,
@@ -376,8 +436,9 @@ class DownloadManager extends ChangeNotifier {
         total = int.tryParse(h.value('content-length') ?? '') ?? -1;
       }
       final name = _nameFromDisposition(h.value('content-disposition'));
+      final type = h.value('content-type');
       token.cancel('probe done');
-      return (total: total, range: range && total > 0, fileName: name);
+      return ProbeResult(total, range && total > 0, name, type);
     } on DioException catch (e) {
       throw _dioMessage(e);
     }
