@@ -5,13 +5,13 @@ class DownloadItem {
   final String url;
   String fileName;
   String dirPath;
-  int total; // -1 = অজানা
+  int total; // -1 = unknown
   int downloaded;
   bool rangeSupported;
   DlStatus status;
   String? error;
 
-  // রানটাইম (সেভ হয় না)
+  // runtime only (not persisted)
   double speed = 0; // bytes/sec
 
   DownloadItem({
@@ -48,7 +48,7 @@ class DownloadItem {
       (e) => e.name == j['status'],
       orElse: () => DlStatus.paused,
     );
-    // অ্যাপ বন্ধ হওয়ার সময় যেটা চলছিল সেটা এখন পজড
+    // anything that was running when the app closed is now paused
     if (st == DlStatus.downloading || st == DlStatus.queued) {
       st = DlStatus.paused;
     }
@@ -81,7 +81,7 @@ String formatBytes(num b) {
 String formatEta(DownloadItem d) {
   if (d.total <= 0 || d.speed <= 0) return '--';
   final s = ((d.total - d.downloaded) / d.speed).round();
-  if (s < 60) return '$sসে';
-  if (s < 3600) return '${s ~/ 60}মি ${s % 60}সে';
-  return '${s ~/ 3600}ঘ ${(s % 3600) ~/ 60}মি';
+  if (s < 60) return '${s}s';
+  if (s < 3600) return '${s ~/ 60}m ${s % 60}s';
+  return '${s ~/ 3600}h ${(s % 3600) ~/ 60}m';
 }

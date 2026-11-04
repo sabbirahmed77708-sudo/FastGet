@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
-/// সাধারণ বিল্ট-ইন ব্রাউজার। ফাইল-লিংকে (zip, mp4, mp3, apk ...) ক্লিক করলে
-/// ডাউনলোড করার প্রস্তাব দেয় এবং বাছাই করা লিংক হোম স্ক্রিনে ফেরত পাঠায়।
+/// Simple built-in browser. Tapping a file link (zip, mp4, mp3, apk ...) offers
+/// to download it and returns the chosen URL to the home screen.
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
 
@@ -68,7 +68,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('ফাইল পাওয়া গেছে',
+              const Text('File detected',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               Text(url, maxLines: 3, overflow: TextOverflow.ellipsis),
@@ -78,12 +78,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 children: [
                   TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('না')),
+                      child: const Text('Cancel')),
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: () => Navigator.pop(ctx, true),
-                    icon: const Icon(Icons.download),
-                    label: const Text('ডাউনলোড'),
+                    icon: const Icon(Icons.download_rounded),
+                    label: const Text('Download'),
                   ),
                 ],
               ),
@@ -130,20 +130,24 @@ class _BrowserScreenState extends State<BrowserScreen> {
             textInputAction: TextInputAction.go,
             onSubmitted: _go,
             decoration: const InputDecoration(
-              hintText: 'সার্চ করুন বা লিংক দিন',
-              border: InputBorder.none,
+              hintText: 'Search or enter address',
+              prefixIcon: Icon(Icons.search_rounded, size: 20),
+              isDense: true,
+              contentPadding:
+                  EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
           ),
           actions: [
             IconButton(
-              tooltip: 'এই লিংক ডাউনলোড করুন',
-              icon: const Icon(Icons.download),
+              tooltip: 'Download this link',
+              icon: const Icon(Icons.download_rounded),
               onPressed: () {
                 if (_current.isNotEmpty) _offer(_current);
               },
             ),
             IconButton(
-              icon: const Icon(Icons.refresh),
+              tooltip: 'Reload',
+              icon: const Icon(Icons.refresh_rounded),
               onPressed: () => _c.reload(),
             ),
           ],

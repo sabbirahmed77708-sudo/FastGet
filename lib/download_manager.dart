@@ -58,7 +58,7 @@ class DownloadManager extends ChangeNotifier {
         'items', jsonEncode(items.map((e) => e.toJson()).toList()));
   }
 
-  /// ডাউনলোড ফোল্ডার: Downloads/FastGet (অনুমতি না পেলে অ্যাপের নিজস্ব ফোল্ডার)
+  /// Download folder: Downloads/FastGet (falls back to the app's own folder without permission)
   Future<String> downloadDir() async {
     if (_dir != null) return _dir!;
     String? path;
@@ -93,7 +93,7 @@ class DownloadManager extends ChangeNotifier {
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
-      throw 'সঠিক http/https লিংক দিন';
+      throw 'Enter a valid http/https link';
     }
     final dir = await downloadDir();
     final probe = await _probe(url);
@@ -155,7 +155,7 @@ class DownloadManager extends ChangeNotifier {
 
   Future<void> _execute(DownloadItem item, _Run run) async {
     try {
-      // মেটাডেটা অজানা থাকলে আবার দেখে নিই
+      // Re-probe if metadata is unknown
       if (item.total <= 0) {
         final p = await _probe(item.url);
         item.total = p.total;
@@ -178,7 +178,7 @@ class DownloadManager extends ChangeNotifier {
       run.ticker?.cancel();
       item.speed = 0;
       if (CancelToken.isCancel(e)) {
-        // pause()/remove() আগেই স্ট্যাটাস সেট করেছে
+        // pause()/remove() already set the status
       } else {
         item.status = DlStatus.failed;
         item.error = _dioMessage(e);
@@ -187,7 +187,7 @@ class DownloadManager extends ChangeNotifier {
       run.ticker?.cancel();
       item.speed = 0;
       if (run.token.isCancelled) {
-        // ঠিক আছে
+        // fine
       } else {
         item.status = DlStatus.failed;
         item.error = e.toString();
@@ -256,7 +256,7 @@ class DownloadManager extends ChangeNotifier {
       DownloadItem item, _Run run, int index, int start, int end) async {
     final already = run.segBytes[index];
     final from = start + already;
-    if (from > end) return; // এই অংশ আগেই শেষ
+    if (from > end) return; // this segment is already complete
 
     final resp = await _dio.get<ResponseBody>(
       item.url,
@@ -268,7 +268,7 @@ class DownloadManager extends ChangeNotifier {
       cancelToken: run.token,
     );
     if (resp.statusCode != 206) {
-      throw 'সার্ভার Range সাপোর্ট করেনি (${resp.statusCode})';
+      throw 'Server did not honour Range request (${resp.statusCode})';
     }
 
     final sink = File(_partPath(item, index)).openWrite(mode: FileMode.append);
@@ -294,7 +294,7 @@ class DownloadManager extends ChangeNotifier {
 
   Future<void> _singleStream(DownloadItem item, _Run run) async {
     final part = File(_partPath(item, 0));
-    if (await part.exists()) await part.delete(); // রিজিউম সম্ভব না
+    if (await part.exists()) await part.delete(); // cannot resume a single stream
     item.downloaded = 0;
 
     final resp = await _dio.get<ResponseBody>(
@@ -431,13 +431,13 @@ class DownloadManager extends ChangeNotifier {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.sendTimeout:
-        return 'সংযোগে টাইমআউট হয়েছে';
+        return 'Connection timed out';
       case DioExceptionType.connectionError:
-        return 'ইন্টারনেট সংযোগ নেই বা সার্ভারে পৌঁছানো যাচ্ছে না';
+        return 'No internet connection or server unreachable';
       case DioExceptionType.badResponse:
-        return 'সার্ভার এরর (${e.response?.statusCode})';
+        return 'Server error (${e.response?.statusCode})';
       default:
-        return e.message ?? 'অজানা সমস্যা';
+        return e.message ?? 'Unknown error';
     }
   }
 }
