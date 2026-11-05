@@ -45,6 +45,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _refresh() async {
+    await dm.refresh();
+    await UpdateChecker.instance.check(silent: true);
+  }
+
   // ------------------------------------------------------------ actions
 
   Future<void> _showAddSheet() async {
@@ -338,14 +343,27 @@ class _HomeScreenState extends State<HomeScreen> {
           _summary(),
           _filters(),
           Expanded(
-            child: items.isEmpty
-                ? _empty()
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) => _tile(items[i]),
-                  ),
+            // Pull down to refresh, like Chrome.
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: items.isEmpty
+                  ? LayoutBuilder(
+                      builder: (context, box) => SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        child: SizedBox(
+                          height: box.maxHeight,
+                          child: _empty(),
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (_, i) => _tile(items[i]),
+                    ),
+            ),
           ),
         ],
       ),
@@ -366,6 +384,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final done =
         dm.items.where((e) => e.status == DlStatus.completed).length;
 
+    // on/off switch: shown while there is something running or paused
+    final showSwitch = dm.hasUnfinished;
+    final on = dm.anyRunning;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       padding: const EdgeInsets.all(18),
@@ -377,29 +399,62 @@ class _HomeScreenState extends State<HomeScreen> {
           end: Alignment.bottomRight,
         ),
       ),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    T('Current speed',
+                        style: TextStyle(
+                            color: cs.onPrimary.withValues(alpha: 0.8),
+                            fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Text('${formatBytes(speed)}/s',
+                        style: TextStyle(
+                            color: cs.onPrimary,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5)),
+                  ],
+                ),
+              ),
+              _stat(cs, '${active.length}', 'Active'),
+              const SizedBox(width: 20),
+              _stat(cs, '$done', 'Done'),
+            ],
+          ),
+          if (showSwitch) ...[
+            const SizedBox(height: 10),
+            Divider(height: 1, color: cs.onPrimary.withValues(alpha: 0.25)),
+            const SizedBox(height: 4),
+            Row(
               children: [
-                T('Current speed',
-                    style: TextStyle(
-                        color: cs.onPrimary.withValues(alpha: 0.8),
-                        fontSize: 13)),
-                const SizedBox(height: 4),
-                Text('${formatBytes(speed)}/s',
-                    style: TextStyle(
-                        color: cs.onPrimary,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5)),
+                Icon(on ? Icons.downloading_rounded : Icons.pause_circle_outline,
+                    size: 20, color: cs.onPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(tr(on ? 'Downloads on' : 'Downloads off'),
+                      style: TextStyle(
+                          color: cs.onPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14)),
+                ),
+                Switch(
+                  value: on,
+                  onChanged: dm.setDownloadsOn,
+                  activeThumbColor: cs.primary,
+                  activeTrackColor: cs.onPrimary,
+                  inactiveThumbColor: cs.onPrimary,
+                  inactiveTrackColor: cs.onPrimary.withValues(alpha: 0.3),
+                  trackOutlineColor:
+                      WidgetStateProperty.all(Colors.transparent),
+                ),
               ],
             ),
-          ),
-          _stat(cs, '${active.length}', 'Active'),
-          const SizedBox(width: 20),
-          _stat(cs, '$done', 'Done'),
+          ],
         ],
       ),
     );

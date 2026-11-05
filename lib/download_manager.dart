@@ -299,6 +299,33 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  /// True when something is downloading right now.
+  bool get anyRunning => items.any((e) => e.status == DlStatus.downloading);
+
+  /// True when there is at least one unfinished (running or paused) download,
+  /// i.e. the home screen's on/off switch has something to control.
+  bool get hasUnfinished => items.any((e) =>
+      e.status == DlStatus.downloading ||
+      e.status == DlStatus.paused ||
+      e.status == DlStatus.queued);
+
+  /// Master switch on the home screen: ON resumes everything, OFF pauses it.
+  void setDownloadsOn(bool on) {
+    if (on) {
+      resumeAll();
+    } else {
+      pauseAll();
+    }
+  }
+
+  /// Pull-to-refresh on the home list: re-checks Wi-Fi waiting items and
+  /// redraws the list.
+  Future<void> refresh() async {
+    await _wifiTick();
+    await _save();
+    notifyListeners();
+  }
+
   Future<void> remove(DownloadItem item, {bool deleteFile = false}) async {
     final run = _runs[item.id];
     run?.token.cancel('removed');

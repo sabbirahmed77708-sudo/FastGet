@@ -78,6 +78,18 @@ class BrowserController extends ChangeNotifier {
 
   // ---------------------------------------------------------------- init
 
+  /// Pull-to-refresh on the browser start page: re-reads shortcuts and redraws.
+  Future<void> refreshHome() async {
+    final p = _prefs;
+    if (p != null) {
+      shortcuts = p.containsKey('b_shortcuts')
+          ? _readList(p, 'b_shortcuts', Shortcut.fromJson)
+          : [..._defaultShortcuts];
+    }
+    await Future.delayed(const Duration(milliseconds: 400));
+    notifyListeners();
+  }
+
   Future<void> init() async {
     final p = _prefs = await SharedPreferences.getInstance();
     blockAds = p.getBool('b_blockAds') ?? false;

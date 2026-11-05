@@ -76,7 +76,11 @@ class _HomePageState extends State<HomePage> {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
       child: SafeArea(
-        child: SingleChildScrollView(
+        // Pull down to refresh, like Chrome.
+        child: RefreshIndicator(
+          onRefresh: b.refreshHome,
+          child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 48, 20, 40),
           child: ListenableBuilder(
             listenable: b,
@@ -137,6 +141,7 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
+        ),
         ),
       ),
     );

@@ -69,6 +69,7 @@ class _WebHost extends StatefulWidget {
 
 class _WebHostState extends State<_WebHost> {
   late final Widget _web;
+  late final PullToRefreshController _pull;
 
   BrowserTab get tab => widget.tab;
   BrowserController get browser => widget.browser;
@@ -103,9 +104,27 @@ class _WebHostState extends State<_WebHost> {
 
     final usePopupWindow = tab.windowId != null;
 
+    // Pull the page down to reload it, like Chrome.
+    _pull = PullToRefreshController(
+      settings: PullToRefreshSettings(
+        color: const Color(0xFF3B82F6),
+        backgroundColor: Colors.white,
+      ),
+      onRefresh: () async {
+        final c = tab.controller;
+        if (c == null) {
+          await _pull.endRefreshing();
+          return;
+        }
+        tab.update(() => tab.error = null);
+        await c.reload();
+      },
+    );
+
     _web = InAppWebView(
       key: ValueKey('wv_${tab.id}'),
       windowId: tab.windowId,
+      pullToRefreshController: _pull,
       initialUrlRequest: (!usePopupWindow && tab.pendingUrl != null)
           ? URLRequest(url: WebUri(tab.pendingUrl!))
           : null,
@@ -146,6 +165,7 @@ class _WebHostState extends State<_WebHost> {
           tab.isLoading = false;
           tab.progress = 100;
         });
+        _pull.endRefreshing();
         await browser.refreshNavState(tab);
         browser.addHistory(tab);
         browser.saveTabs();
@@ -153,6 +173,7 @@ class _WebHostState extends State<_WebHost> {
       },
       onReceivedError: (c, request, error) {
         if (!(request.isForMainFrame ?? false)) return;
+        _pull.endRefreshing();
         final d = error.description;
         if (d.contains('ERR_ABORTED')) return; // e.g. a download took over
         tab.update(() {
@@ -236,6 +257,9 @@ class _WebHostState extends State<_WebHost> {
       tab.findController?.dispose();
     } catch (_) {}
     tab.findController = null;
+    try {
+      _pull.dispose();
+    } catch (_) {}
     super.dispose();
   }
 

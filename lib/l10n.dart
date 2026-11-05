@@ -217,6 +217,8 @@ const Map<String, String> _bn = {
   'Could not check for updates': 'আপডেট চেক করা যায়নি',
   'Update added to downloads. Open it when it finishes to install.':
       'আপডেট ডাউনলোডে যোগ হয়েছে। শেষ হলে খুলে ইনস্টল করুন।',
+  'Downloads on': 'ডাউনলোড চালু',
+  'Downloads off': 'ডাউনলোড বন্ধ',
   'Pause all': 'সব পজ',
   'Resume all': 'সব রিজিউম',
   'Download complete': 'ডাউনলোড সম্পূর্ণ',
