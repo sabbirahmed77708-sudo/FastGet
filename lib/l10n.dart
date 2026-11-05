@@ -222,4 +222,5 @@ const Map<String, String> _bn = {
   'Download complete': 'ডাউনলোড সম্পূর্ণ',
   'Download failed': 'ডাউনলোড ব্যর্থ',
   'New update': 'নতুন আপডেট',
+  'Developer': 'ডেভেলপার',
 };

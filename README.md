@@ -10,7 +10,7 @@
 - বিল্ট-ইন ব্রাউজার: ফাইল-লিংকে চাপলে ডাউনলোডের প্রস্তাব দেয়
 - উপরে ব্রাউজার আইকন ও থ্রি-ডট মেনু (শেয়ার অ্যাপ, সেটিংস, About)
 - **Share app**: অ্যাপের APK যে কারো সাথে শেয়ার করা যায়
-- **About**: লোগো, ভার্সন, "Check for update" (নতুন আপডেট এলে মেনুতে ডট দেখায়)
+- **About**: লোগো, ভার্সন, ডেভেলপার (SS Diva), "Check for update" (নতুন আপডেট এলে মেনুতে ডট দেখায়)
 - ডার্ক / লাইট থিম, বাংলা / ইংরেজি ভাষা
 - ফাইল সেভ হয় `Download/FastGet` ফোল্ডারে
 
@@ -54,4 +54,4 @@ flutter build apk --release
 - `lib/notifier.dart` + `tool/DownloadService.kt.tpl` – notification and foreground service
 - `tool/MainActivity.kt.tpl` – keeps the Flutter engine alive after the app is closed
 - `lib/updater.dart` – update check against GitHub Releases
-- `tool/make_icon.py` – draws the app icon (`assets/icon/`)
+- `assets/icon/logo.png` – the DROM logo; `tool/make_icon.py` builds the launcher icons from it

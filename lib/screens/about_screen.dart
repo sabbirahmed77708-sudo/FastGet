@@ -67,11 +67,8 @@ class _AboutScreenState extends State<AboutScreen> {
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
             children: [
               Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(28),
-                  child: Image.asset('assets/icon/icon.png',
-                      width: 104, height: 104),
-                ),
+                child: Image.asset('assets/icon/logo.png',
+                    width: 132, height: 132, filterQuality: FilterQuality.high),
               ),
               const SizedBox(height: 18),
               const Center(
@@ -94,6 +91,16 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 28),
               _updateCard(cs),
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  leading: Icon(Icons.person_rounded, color: cs.primary),
+                  title: const T('Developer'),
+                  subtitle: const Text('SS Diva',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                ),
+              ),
             ],
           );
         },

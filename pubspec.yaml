@@ -27,12 +27,12 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/icon/icon.png
+    - assets/icon/logo.png
 
 # Launcher icon (generated in CI with: dart run flutter_launcher_icons)
 flutter_launcher_icons:
   android: true
   ios: false
   image_path: "assets/icon/icon.png"
-  adaptive_icon_background: "#4F63EE"
+  adaptive_icon_background: "#F2F4F8"
   adaptive_icon_foreground: "assets/icon/icon_fg.png"
