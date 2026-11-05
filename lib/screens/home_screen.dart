@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../app_share.dart';
+import '../browser/download_prompt.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -63,6 +64,12 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      sheetAnimationStyle: const AnimationStyle(
+        duration: Duration(milliseconds: 420),
+        reverseDuration: Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      ),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -117,18 +124,23 @@ class _HomeScreenState extends State<HomeScreen> {
     await _add(url);
   }
 
+  /// A pasted link goes through the same download popup as the browser:
+  /// details, file name and save folder are shown before anything starts.
   Future<void> _add(String url) async {
-    try {
-      await dm.addUrl(url);
-    } catch (e) {
+    final u = url.trim();
+    final uri = Uri.tryParse(u);
+    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(tr(e.toString())),
+          content: Text(tr('Enter a valid http/https link')),
         ),
       );
+      return;
     }
+    if (!mounted) return;
+    await showDownloadPrompt(context, DownloadRequest(url: u));
   }
 
   Future<void> _openBrowser() async {
@@ -367,12 +379,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddSheet,
-        icon: const Icon(Icons.add_rounded),
-        label: const T('Add link',
-            style: TextStyle(fontWeight: FontWeight.w600)),
-      ),
+      floatingActionButton: _AddLinkButton(onTap: _showAddSheet),
     );
   }
 
@@ -659,6 +666,65 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Add link" button: bounces and the + turns into a × while the sheet is open.
+class _AddLinkButton extends StatefulWidget {
+  final Future<void> Function() onTap;
+  const _AddLinkButton({required this.onTap});
+
+  @override
+  State<_AddLinkButton> createState() => _AddLinkButtonState();
+}
+
+class _AddLinkButtonState extends State<_AddLinkButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+      reverseDuration: const Duration(milliseconds: 260));
+
+  late final Animation<double> _scale = TweenSequence<double>([
+    TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.86), weight: 30),
+    TweenSequenceItem(tween: Tween(begin: 0.86, end: 1.06), weight: 40),
+    TweenSequenceItem(tween: Tween(begin: 1.06, end: 1.0), weight: 30),
+  ]).animate(CurvedAnimation(parent: _c, curve: Curves.easeOut));
+
+  late final Animation<double> _turn = Tween<double>(begin: 0, end: 0.125)
+      .animate(CurvedAnimation(parent: _c, curve: Curves.easeOutBack));
+
+  bool _opening = false;
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  Future<void> _tap() async {
+    if (_opening) return;
+    _opening = true;
+    HapticFeedback.lightImpact();
+    _c.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 220));
+    await widget.onTap();
+    if (mounted) await _c.reverse();
+    _opening = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ScaleTransition(
+      scale: _scale,
+      child: FloatingActionButton.extended(
+        onPressed: _tap,
+        icon: RotationTransition(
+            turns: _turn, child: const Icon(Icons.add_rounded)),
+        label: const T('Add link',
+            style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
   }

@@ -135,14 +135,41 @@ class DownloadManager extends ChangeNotifier {
 
   // ----------------------------------------------------------------- add
 
+  /// Folder last chosen in the download popup; falls back to Download/FastGet.
+  Future<String> preferredDir() async {
+    final saved = _prefs?.getString('save_dir');
+    if (saved != null && saved.isNotEmpty) {
+      try {
+        if (await Directory(saved).exists()) return saved;
+      } catch (_) {}
+    }
+    return downloadDir();
+  }
+
+  Future<void> setPreferredDir(String path) async {
+    await _prefs?.setString('save_dir', path);
+  }
+
   Future<DownloadItem> addUrl(String rawUrl,
-      {Map<String, String>? headers, String? suggestedName}) async {
+      {Map<String, String>? headers,
+      String? suggestedName,
+      String? dirPath}) async {
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
       throw 'Enter a valid http/https link';
     }
-    final dir = await downloadDir();
+    final String dir;
+    if (dirPath != null && dirPath.isNotEmpty) {
+      try {
+        await Directory(dirPath).create(recursive: true);
+      } catch (_) {
+        throw 'Cannot save to this folder. Please choose another one.';
+      }
+      dir = dirPath;
+    } else {
+      dir = await preferredDir();
+    }
     final hdrs = headers ?? const <String, String>{};
     final probe = await inspect(url, headers: hdrs);
     final name = _uniqueName(

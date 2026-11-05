@@ -83,7 +83,6 @@ const Map<String, String> _bn = {
   'Fast download manager with a built-in browser.':
       'বিল্ট-ইন ব্রাউজারসহ দ্রুত ডাউনলোড ম্যানেজার।',
   // --- error messages
-  'Enter a valid http/https link': 'সঠিক http/https লিংক দিন',
   'This link opens a web page, not a downloadable file':
       'এই লিংক একটি ওয়েবপেজ খোলে, ডাউনলোডযোগ্য ফাইল নয়',
   'YouTube links are not supported. Use YouTube Premium for offline videos.':
@@ -217,6 +216,35 @@ const Map<String, String> _bn = {
   'Could not check for updates': 'আপডেট চেক করা যায়নি',
   'Update added to downloads. Open it when it finishes to install.':
       'আপডেট ডাউনলোডে যোগ হয়েছে। শেষ হলে খুলে ইনস্টল করুন।',
+  // --- download popup / folder picker
+  'Download file': 'ফাইল ডাউনলোড',
+  'File name': 'ফাইলের নাম',
+  'Size': 'সাইজ',
+  'Type': 'ধরন',
+  'Source': 'সোর্স',
+  'Download mode': 'ডাউনলোড মোড',
+  'Link': 'লিংক',
+  'Save to': 'সেভ হবে',
+  'Change': 'বদলান',
+  'Choose folder': 'ফোল্ডার বাছুন',
+  'Select this folder': 'এই ফোল্ডার নিন',
+  'New folder': 'নতুন ফোল্ডার',
+  'Folder name': 'ফোল্ডারের নাম',
+  'Create': 'তৈরি করুন',
+  'No folders here': 'এখানে কোনো ফোল্ডার নেই',
+  'Internal storage': 'ইন্টারনাল স্টোরেজ',
+  'DROM folder': 'DROM ফোল্ডার',
+  'Movies': 'মুভিজ',
+  'Music': 'মিউজিক',
+  'Documents': 'ডকুমেন্টস',
+  'Fast multi-part · resumable': 'দ্রুত মাল্টি-পার্ট · রিজিউম করা যায়',
+  'Enter a file name': 'ফাইলের নাম লিখুন',
+  'Enter a valid http/https link': 'সঠিক http/https লিংক দিন',
+  'Cannot save to this folder. Please choose another one.':
+      'এই ফোল্ডারে সেভ করা যাচ্ছে না। অন্য ফোল্ডার বাছুন।',
+  'Storage permission is needed to browse folders.':
+      'ফোল্ডার দেখার জন্য স্টোরেজ অনুমতি দরকার।',
+  'Allow access': 'অনুমতি দিন',
   'Downloads on': 'ডাউনলোড চালু',
   'Downloads off': 'ডাউনলোড বন্ধ',
   'Pause all': 'সব পজ',
