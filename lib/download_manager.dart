@@ -17,7 +17,7 @@ const String _ua =
     'Chrome/120.0 Mobile Safari/537.36';
 
 /// Result of inspecting a URL before downloading it.
-/// Hosts DROX does not download from (YouTube's terms forbid it).
+/// Hosts DROM does not download from (YouTube's terms forbid it).
 const unsupportedMessage =
     'YouTube links are not supported. Use YouTube Premium for offline videos.';
 
@@ -74,7 +74,7 @@ class DownloadManager extends ChangeNotifier {
   String? _dir;
 
   // Wi-Fi only: when ON, downloads run only on Wi-Fi / Ethernet.
-  static const MethodChannel _net = MethodChannel('drox/net');
+  static const MethodChannel _net = MethodChannel('drom/net');
   bool wifiOnly = false;
   final Set<String> _waitingForWifi = {};
   Timer? _wifiTimer;
@@ -279,6 +279,24 @@ class DownloadManager extends ChangeNotifier {
     run?.token.cancel('paused');
     notifyListeners();
     _save();
+  }
+
+  /// Pauses everything that is running (notification "Pause all").
+  void pauseAll() {
+    for (final it
+        in items.where((e) => e.status == DlStatus.downloading).toList()) {
+      pause(it);
+    }
+  }
+
+  /// Resumes everything that is paused (notification "Resume all").
+  void resumeAll() {
+    for (final it in items
+        .where((e) =>
+            e.status == DlStatus.paused || e.status == DlStatus.queued)
+        .toList()) {
+      start(it);
+    }
   }
 
   Future<void> remove(DownloadItem item, {bool deleteFile = false}) async {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../screens/app_settings_screen.dart';
 import '../screens/home_screen.dart';
 import 'browser_controller.dart';
 import 'browser_menu.dart';
@@ -10,7 +11,7 @@ import 'tab_view.dart';
 import 'tabs_drawer.dart';
 import '../l10n.dart';
 
-/// The DROX browser: toolbar, tabs drawer, WebViews, menu and find bar.
+/// The DROM browser: toolbar, tabs drawer, WebViews, menu and find bar.
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
 
@@ -62,7 +63,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (started && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: const T('Added to DROX downloads'),
+          content: const T('Added to DROM downloads'),
           action: SnackBarAction(label: tr('View'), onPressed: _openDownloads),
         ));
       }
@@ -166,15 +167,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             MaterialPageRoute(
                 builder: (_) => BrowserSettingsScreen(browser: browser))),
         onClearData: () => confirmClearData(context, browser),
-        onAbout: () => showAboutDialog(
-          context: context,
-          applicationName: 'DROX',
-          applicationVersion: '1.0.0',
-          applicationLegalese:
-              'Fast download manager with a built-in browser.',
-          applicationIcon: Icon(Icons.bolt_rounded,
-              size: 40, color: Theme.of(context).colorScheme.primary),
-        ),
+        onAbout: () => showAboutDrom(context),
       ),
     );
   }

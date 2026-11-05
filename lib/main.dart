@@ -4,16 +4,21 @@ import 'browser/browser_controller.dart';
 import 'download_manager.dart';
 import 'l10n.dart';
 import 'link_intake.dart';
+import 'notifier.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
+import 'updater.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DownloadManager.instance.init();
   await L10n.instance.init();
   await BrowserController.instance.init();
+  DownloadNotifier.instance.start();
   runApp(const FastGetApp());
   LinkIntake.instance.start();
+  // quiet check; a new version shows up in the menu and in About
+  UpdateChecker.instance.check(silent: true);
 }
 
 class FastGetApp extends StatelessWidget {
@@ -30,7 +35,7 @@ class FastGetApp extends StatelessWidget {
           key: ValueKey(L10n.instance.code),
           child: child ?? const SizedBox.shrink(),
         ),
-        title: 'DROX',
+        title: 'DROM',
         debugShowCheckedModeBanner: false,
         themeMode: BrowserController.instance.themeMode,
         theme: AppTheme.light(),

@@ -184,8 +184,8 @@ class _MenuBody extends StatelessWidget {
               item(Icons.delete_outline_rounded, 'Clear Browsing Data',
                   actions.onClearData),
               const Divider(height: 1),
-              item(Icons.bolt_rounded, 'Return to DROX', actions.onReturn),
-              item(Icons.info_outline_rounded, 'About DROX', actions.onAbout),
+              item(Icons.bolt_rounded, 'Return to DROM', actions.onReturn),
+              item(Icons.info_outline_rounded, 'About DROM', actions.onAbout),
             ],
           ),
         );

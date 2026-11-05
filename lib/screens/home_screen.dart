@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 
+import '../app_share.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../updater.dart';
 import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
 import 'app_settings_screen.dart';
@@ -29,11 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     dm.addListener(_rebuild);
+    UpdateChecker.instance.addListener(_rebuild);
   }
 
   @override
   void dispose() {
     dm.removeListener(_rebuild);
+    UpdateChecker.instance.removeListener(_rebuild);
     super.dispose();
   }
 
@@ -226,9 +230,15 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    final hasUpdate = UpdateChecker.instance.hasUpdate;
     return PopupMenuButton<String>(
       tooltip: tr('More'),
-      icon: const Icon(Icons.more_vert_rounded),
+      // a small dot shows when a new version is available
+      icon: Badge(
+        isLabelVisible: hasUpdate,
+        smallSize: 9,
+        child: const Icon(Icons.more_vert_rounded),
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onSelected: _onMenu,
       itemBuilder: (_) => [
@@ -241,8 +251,10 @@ class _HomeScreenState extends State<HomeScreen> {
         entry('lang', Icons.language_rounded, 'Language',
             note: L10n.instance.isBn ? 'বাংলা' : 'English'),
         const PopupMenuDivider(),
+        entry('share', Icons.share_rounded, 'Share app'),
         entry('settings', Icons.settings_outlined, 'Settings'),
-        entry('about', Icons.info_outline_rounded, 'About'),
+        entry('about', Icons.info_outline_rounded, 'About',
+            note: hasUpdate ? tr('New update') : null),
         entry('exit', Icons.exit_to_app_rounded, 'Exit'),
       ],
     );
@@ -267,6 +279,9 @@ class _HomeScreenState extends State<HomeScreen> {
       case 'lang':
         await showLanguageDialog(context);
         break;
+      case 'share':
+        await shareApp();
+        break;
       case 'settings':
         await Navigator.push<void>(
           context,
@@ -274,7 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
         );
         break;
       case 'about':
-        showAboutDrox(context);
+        showAboutDrom(context);
         break;
       case 'exit':
         await SystemNavigator.pop();
@@ -304,16 +319,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final items = _visible;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.embedded ? tr('Downloads') : 'DROX'),
+        title: Text(widget.embedded ? tr('Downloads') : 'DROM'),
         actions: [
-          if (!widget.embedded) ...[
-            IconButton.filledTonal(
-              tooltip: tr('Browser'),
-              icon: const Icon(Icons.public_rounded),
-              onPressed: _openBrowser,
-            ),
-            _appMenu(),
-          ],
+          // Browser icon and the three-dot menu are always there.
+          IconButton.filledTonal(
+            tooltip: tr('Browser'),
+            icon: const Icon(Icons.public_rounded),
+            // opened from the browser's Downloads entry: go back to it
+            onPressed:
+                widget.embedded ? () => Navigator.pop(context) : _openBrowser,
+          ),
+          _appMenu(),
           const SizedBox(width: 8),
         ],
       ),

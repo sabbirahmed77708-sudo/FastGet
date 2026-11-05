@@ -1,4 +1,7 @@
-"""Adds the permissions FastGet needs to the generated AndroidManifest.xml."""
+"""Adds what DROM needs to the generated Android project:
+permissions, app label, the Share intent filter, the download foreground
+service, and our own MainActivity.kt / DownloadService.kt."""
+import glob
 import re
 import sys
 
@@ -11,7 +14,21 @@ PERMS = [
     "android.permission.WRITE_EXTERNAL_STORAGE",
     "android.permission.MANAGE_EXTERNAL_STORAGE",
     "android.permission.POST_NOTIFICATIONS",
+    # background downloads
+    "android.permission.FOREGROUND_SERVICE",
+    "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
+    "android.permission.WAKE_LOCK",
+    # installing an update that DROM downloaded itself
+    "android.permission.REQUEST_INSTALL_PACKAGES",
 ]
+
+# --- find the package the generated MainActivity.kt lives in
+found = glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True)
+if not found:
+    sys.exit("generated MainActivity.kt not found")
+target = found[0]
+with open(target, encoding="utf-8") as f:
+    pkg = re.search(r"^package\s+([\w.]+)", f.read(), re.M).group(1)
 
 with open(PATH, encoding="utf-8") as f:
     xml = f.read()
@@ -26,14 +43,14 @@ if "<application" not in xml:
 
 xml = xml.replace("<application", add + "    <application", 1)
 
-# http:// লিংকও কাজ করবে, আর পুরোনো স্টোরেজ মডেল চলবে
+# http:// links work too, and the old storage model keeps working
 if "usesCleartextTraffic" not in xml:
     xml = xml.replace("<application", '<application android:usesCleartextTraffic="true"', 1)
 if "requestLegacyExternalStorage" not in xml:
     xml = xml.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
 
-# অ্যাপের নাম
-xml = re.sub(r'android:label="[^"]*"', 'android:label="DROX"', xml, count=1)
+# app name
+xml = re.sub(r'android:label="[^"]*"', 'android:label="DROM"', xml, count=1)
 
 # Accept "Share" of text/links from other apps into the main activity.
 if "android.intent.action.SEND" not in xml:
@@ -48,20 +65,31 @@ if "android.intent.action.SEND" not in xml:
         sys.exit("AndroidManifest.xml has no </activity> tag")
     xml = xml.replace("</activity>", share_filter + "    </activity>", 1)
 
+# Foreground service that keeps downloads alive in the background.
+if "DownloadService" not in xml:
+    service = (
+        f'    <service android:name="{pkg}.DownloadService"\n'
+        '        android:exported="false"\n'
+        '        android:foregroundServiceType="dataSync"/>\n'
+    )
+    if "</application>" not in xml:
+        sys.exit("AndroidManifest.xml has no </application> tag")
+    xml = xml.replace("</application>", service + "    </application>", 1)
+
 with open(PATH, "w", encoding="utf-8") as f:
     f.write(xml)
 
-# Install our MainActivity (share receiver) over the generated one.
-import glob
-found = glob.glob("android/app/src/main/kotlin/**/MainActivity.kt", recursive=True)
-if not found:
-    sys.exit("generated MainActivity.kt not found")
-target = found[0]
-with open(target, encoding="utf-8") as f:
-    pkg = re.search(r"^package\s+([\w.]+)", f.read(), re.M).group(1)
-with open("tool/MainActivity.kt.tpl", encoding="utf-8") as f:
-    kt = f.read().replace("__PACKAGE__", pkg)
-with open(target, "w", encoding="utf-8") as f:
-    f.write(kt)
+# --- install our Kotlin sources next to the generated MainActivity.kt
+import os
 
-print("Manifest patched, MainActivity installed for package", pkg)
+target_dir = os.path.dirname(target)
+for tpl, out in (
+    ("tool/MainActivity.kt.tpl", "MainActivity.kt"),
+    ("tool/DownloadService.kt.tpl", "DownloadService.kt"),
+):
+    with open(tpl, encoding="utf-8") as f:
+        kt = f.read().replace("__PACKAGE__", pkg)
+    with open(os.path.join(target_dir, out), "w", encoding="utf-8") as f:
+        f.write(kt)
+
+print("Manifest patched, Kotlin sources installed for package", pkg)

@@ -1,10 +1,10 @@
 name: fastget
-description: FastGet - fast multi-segment download manager with pause/resume.
+description: DROM - fast multi-segment download manager with pause/resume and a built-in browser.
 publish_to: "none"
 version: 1.0.0+1
 
 environment:
-  sdk: ">=3.3.0 <4.0.0"
+  sdk: ">=3.5.0 <4.0.0"
 
 dependencies:
   flutter:
@@ -16,10 +16,23 @@ dependencies:
   permission_handler: ^11.3.1
   open_filex: ^4.4.0
   flutter_inappwebview: ^6.1.5
+  package_info_plus: ^8.0.2
+  share_plus: ^10.1.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.1
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icon/icon.png
+
+# Launcher icon (generated in CI with: dart run flutter_launcher_icons)
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#4F63EE"
+  adaptive_icon_foreground: "assets/icon/icon_fg.png"

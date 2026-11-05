@@ -4,6 +4,7 @@ import '../browser/browser_controller.dart';
 import '../browser/sheets.dart';
 import '../download_manager.dart';
 import '../l10n.dart';
+import 'about_screen.dart';
 
 /// App-level settings (downloads, appearance, language).
 class AppSettingsScreen extends StatelessWidget {
@@ -72,7 +73,7 @@ class AppSettingsScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.info_outline_rounded),
               title: const T('About'),
-              onTap: () => showAboutDrox(context),
+              onTap: () => showAboutDrom(context),
             ),
           ],
         ),
@@ -103,12 +104,9 @@ Future<void> showLanguageDialog(BuildContext context) async {
   if (picked != null) await l.setLanguage(picked);
 }
 
-void showAboutDrox(BuildContext context) {
-  showAboutDialog(
-    context: context,
-    applicationName: 'DROX',
-    applicationVersion: '1.0.0',
-    applicationIcon: const Icon(Icons.bolt_rounded, size: 40),
-    children: [const T('Fast download manager with a built-in browser.')],
+void showAboutDrom(BuildContext context) {
+  Navigator.push<void>(
+    context,
+    MaterialPageRoute(builder: (_) => const AboutScreen()),
   );
 }

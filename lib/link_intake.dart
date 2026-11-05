@@ -9,13 +9,13 @@ import 'download_manager.dart';
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Handles links that arrive from outside the app: Android "Share" and
-/// links copied to the clipboard. Both end in the normal DROX download prompt,
+/// links copied to the clipboard. Both end in the normal DROM download prompt,
 /// which checks that the link is a real file before anything is downloaded.
 class LinkIntake with WidgetsBindingObserver {
   LinkIntake._();
   static final LinkIntake instance = LinkIntake._();
 
-  static const _channel = MethodChannel('drox/share');
+  static const _channel = MethodChannel('drom/share');
   static const _fileExt = {
     'mp4', 'mkv', 'webm', 'avi', 'mov', '3gp', 'mp3', 'm4a', 'aac', 'wav',
     'flac', 'ogg', 'zip', 'rar', '7z', 'tar', 'gz', 'apk', 'pdf', 'iso',

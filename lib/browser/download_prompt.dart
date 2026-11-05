@@ -6,7 +6,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../l10n.dart';
 
-/// A download the browser wants to hand over to DROX.
+/// A download the browser wants to hand over to DROM.
 class DownloadRequest {
   final String url;
   final String? fileName;
@@ -42,7 +42,7 @@ String _typeLabel(String name, String? mime) {
   return 'File';
 }
 
-/// Shows the DROX confirmation sheet. Returns true when the download started.
+/// Shows the DROM confirmation sheet. Returns true when the download started.
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
   final result = await showModalBottomSheet<bool>(
@@ -158,7 +158,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                 Row(children: [
                   Icon(Icons.bolt_rounded, color: cs.primary),
                   const SizedBox(width: 6),
-                  const T('DROX Download',
+                  const T('DROM Download',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 ]),

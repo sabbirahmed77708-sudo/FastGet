@@ -107,10 +107,10 @@ const Map<String, String> _bn = {
   'Find in Page': 'পেজে খুঁজুন',
   'Desktop Mode': 'ডেস্কটপ মোড',
   'Clear Browsing Data': 'ব্রাউজিং ডেটা মুছুন',
-  'Return to DROX': 'DROX-এ ফিরুন',
-  'About DROX': 'DROX সম্পর্কে',
+  'Return to DROM': 'DROM-এ ফিরুন',
+  'About DROM': 'DROM সম্পর্কে',
   // --- browser screen
-  'Added to DROX downloads': 'DROX ডাউনলোডে যোগ হয়েছে',
+  'Added to DROM downloads': 'DROM ডাউনলোডে যোগ হয়েছে',
   'View': 'দেখুন',
   'Search or type a URL': 'সার্চ করুন বা লিংক লিখুন',
   'Stop': 'থামান',
@@ -121,7 +121,7 @@ const Map<String, String> _bn = {
   'New tab': 'নতুন ট্যাব',
   // --- download prompt
   'File': 'ফাইল',
-  'DROX Download': 'DROX ডাউনলোড',
+  'DROM Download': 'DROM ডাউনলোড',
   'This server does not support fast multi-part download or resume.':
       'এই সার্ভার দ্রুত মাল্টি-পার্ট ডাউনলোড বা রিজিউম সাপোর্ট করে না।',
   'This link returns a web page, not a downloadable file.':
@@ -145,7 +145,7 @@ const Map<String, String> _bn = {
       'এই পেজে সরাসরি মিডিয়া ফাইল পাওয়া যায়নি।',
   'Filter': 'ফিল্টার',
   'Link copied': 'লিংক কপি হয়েছে',
-  'Download with DROX': 'DROX দিয়ে ডাউনলোড',
+  'Download with DROM': 'DROM দিয়ে ডাউনলোড',
   'Clear history': 'ইতিহাস মুছুন',
   'Clear history?': 'ইতিহাস মুছবেন?',
   'Clear': 'মুছুন',
@@ -205,4 +205,21 @@ const Map<String, String> _bn = {
   'Resume': 'রিজিউম',
   'More': 'আরও',
   'Single stream · no resume': 'সিঙ্গেল স্ট্রিম · রিজিউম নেই',
+  // --- share / about / update / notifications
+  'Share app': 'অ্যাপ শেয়ার করুন',
+  'Get DROM - a fast download manager with a built-in browser.':
+      'DROM নিন - বিল্ট-ইন ব্রাউজারসহ দ্রুত ডাউনলোড ম্যানেজার।',
+  'Check for update': 'আপডেট চেক করুন',
+  'Checking for updates…': 'আপডেট চেক করা হচ্ছে…',
+  'You are up to date': 'আপনার অ্যাপ সর্বশেষ ভার্সনে আছে',
+  'New version available': 'নতুন আপডেট এসেছে',
+  'Download update': 'আপডেট ডাউনলোড করুন',
+  'Could not check for updates': 'আপডেট চেক করা যায়নি',
+  'Update added to downloads. Open it when it finishes to install.':
+      'আপডেট ডাউনলোডে যোগ হয়েছে। শেষ হলে খুলে ইনস্টল করুন।',
+  'Pause all': 'সব পজ',
+  'Resume all': 'সব রিজিউম',
+  'Download complete': 'ডাউনলোড সম্পূর্ণ',
+  'Download failed': 'ডাউনলোড ব্যর্থ',
+  'New update': 'নতুন আপডেট',
 };

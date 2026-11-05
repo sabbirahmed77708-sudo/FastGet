@@ -5,6 +5,10 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
+# needed to publish the APK as a GitHub Release (the app's "Check for update" reads it)
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,10 +34,20 @@ jobs:
           # remove generated sample test and lint config (they reference the template app)
           rm -rf test analysis_options.yaml
 
-      - name: Patch AndroidManifest (permissions)
+      - name: Patch AndroidManifest, add service and MainActivity
         run: python3 tool/patch_manifest.py
 
+      # Same signing key for every build, so a new APK installs over the old one
+      # (update without uninstalling).
+      - name: Use the fixed signing key
+        run: |
+          mkdir -p "$HOME/.android"
+          cp tool/debug.keystore "$HOME/.android/debug.keystore"
+
       - run: flutter pub get
+
+      - name: Generate launcher icons
+        run: dart run flutter_launcher_icons
 
       # Newer Android Gradle Plugin rejects 'proguard-android.txt' used by some
       # plugin versions; switch those plugin build files to the optimize variant.
@@ -46,10 +60,23 @@ jobs:
       - name: Analyze (errors fail the build, warnings do not)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      # build number = run number, so the app can tell which build is newer
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Name the APK
+        run: cp build/app/outputs/flutter-apk/app-release.apk DROM.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FastGet-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: DROM-apk
+          path: DROM.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" DROM.apk \
+            --title "DROM build ${{ github.run_number }}" \
+            --notes "$(git log -1 --pretty=%s)" \
+            --latest
