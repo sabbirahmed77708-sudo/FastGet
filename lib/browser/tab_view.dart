@@ -7,6 +7,7 @@ import 'browser_controller.dart';
 import 'browser_tab.dart';
 import 'download_prompt.dart';
 import 'home_page.dart';
+import '../l10n.dart';
 
 /// Renders one tab: its WebView (kept alive underneath), the homepage overlay
 /// and the error page.
@@ -259,7 +260,7 @@ class _ErrorView extends StatelessWidget {
         children: [
           Icon(Icons.wifi_off_rounded, size: 56, color: cs.outline),
           const SizedBox(height: 16),
-          const Text("Can't open this page",
+          const T("Can't open this page",
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Text(tab.error ?? '',
@@ -278,7 +279,7 @@ class _ErrorView extends StatelessWidget {
               tab.controller?.reload();
             },
             icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Try again'),
+            label: const T('Try again'),
           ),
         ],
       ),

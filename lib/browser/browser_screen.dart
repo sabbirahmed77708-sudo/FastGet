@@ -8,6 +8,7 @@ import 'download_prompt.dart';
 import 'sheets.dart';
 import 'tab_view.dart';
 import 'tabs_drawer.dart';
+import '../l10n.dart';
 
 /// The DROX browser: toolbar, tabs drawer, WebViews, menu and find bar.
 class BrowserScreen extends StatefulWidget {
@@ -61,8 +62,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (started && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: const Text('Added to DROX downloads'),
-          action: SnackBarAction(label: 'View', onPressed: _openDownloads),
+          content: const T('Added to DROX downloads'),
+          action: SnackBarAction(label: tr('View'), onPressed: _openDownloads),
         ));
       }
     } finally {
@@ -221,12 +222,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
         title: _urlBar(t, cs),
         actions: [
           IconButton(
-            tooltip: 'Downloads',
+            tooltip: tr('Downloads'),
             icon: const Icon(Icons.download_rounded),
             onPressed: _openDownloads,
           ),
           IconButton(
-            tooltip: 'Menu',
+            tooltip: tr('Menu'),
             icon: const Icon(Icons.more_vert_rounded),
             onPressed: _showMenu,
           ),
@@ -339,10 +340,10 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     textInputAction: TextInputAction.go,
                     onSubmitted: _submitUrl,
                     style: const TextStyle(fontSize: 14.5),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       isDense: true,
                       filled: false,
-                      hintText: 'Search or type a URL',
+                      hintText: tr('Search or type a URL'),
                       contentPadding: EdgeInsets.zero,
                     ),
                   )
@@ -372,7 +373,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
             )
           else
             IconButton(
-              tooltip: t.isLoading ? 'Stop' : 'Refresh',
+              tooltip: t.isLoading ? tr('Stop') : tr('Refresh'),
               visualDensity: VisualDensity.compact,
               icon: Icon(
                   t.isLoading ? Icons.close_rounded : Icons.refresh_rounded,
@@ -409,8 +410,8 @@ class _BrowserScreenState extends State<BrowserScreen> {
                     }
                   },
                   onSubmitted: (_) => t.findController?.findNext(forward: true),
-                  decoration: const InputDecoration(
-                    hintText: 'Find in page',
+                  decoration: InputDecoration(
+                    hintText: tr('Find in page'),
                     isDense: true,
                   ),
                 ),
@@ -425,21 +426,21 @@ class _BrowserScreenState extends State<BrowserScreen> {
                 style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
               ),
               IconButton(
-                tooltip: 'Previous',
+                tooltip: tr('Previous'),
                 icon: const Icon(Icons.keyboard_arrow_up_rounded),
                 onPressed: has
                     ? () => t.findController?.findNext(forward: false)
                     : null,
               ),
               IconButton(
-                tooltip: 'Next',
+                tooltip: tr('Next'),
                 icon: const Icon(Icons.keyboard_arrow_down_rounded),
                 onPressed: has
                     ? () => t.findController?.findNext(forward: true)
                     : null,
               ),
               IconButton(
-                tooltip: 'Close',
+                tooltip: tr('Close'),
                 icon: const Icon(Icons.close_rounded),
                 onPressed: _closeFind,
               ),

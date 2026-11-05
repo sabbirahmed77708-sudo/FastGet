@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'browser_controller.dart';
+import '../l10n.dart';
 
 class MenuActions {
   final VoidCallback onDownloads;
@@ -33,7 +34,7 @@ Future<void> showBrowserMenu(
   return showGeneralDialog(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Menu',
+    barrierLabel: tr('Menu'),
     barrierColor: Colors.black26,
     transitionDuration: const Duration(milliseconds: 180),
     pageBuilder: (ctx, _, __) {
@@ -87,7 +88,7 @@ class _MenuBody extends StatelessWidget {
     Widget quick(IconData icon, String tip, VoidCallback? onTap,
             {bool highlight = false}) =>
         IconButton(
-          tooltip: tip,
+          tooltip: tr(tip),
           icon: Icon(icon, color: highlight ? cs.primary : null),
           onPressed: onTap,
         );
@@ -105,7 +106,7 @@ class _MenuBody extends StatelessWidget {
               Icon(icon, size: 22, color: cs.onSurfaceVariant),
               const SizedBox(width: 16),
               Expanded(
-                  child: Text(label, style: const TextStyle(fontSize: 15))),
+                  child: Text(tr(label), style: const TextStyle(fontSize: 15))),
               if (checked != null)
                 Icon(
                   checked

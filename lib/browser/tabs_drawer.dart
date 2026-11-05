@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'browser_controller.dart';
 import 'browser_tab.dart';
+import '../l10n.dart';
 
 /// Left-side navigation panel listing every open tab, live.
 class TabsDrawer extends StatefulWidget {
@@ -46,7 +47,7 @@ class _TabsDrawerState extends State<TabsDrawer> {
                 Expanded(
                   child: indices.isEmpty
                       ? Center(
-                          child: Text('No matching tabs',
+                          child: T('No matching tabs',
                               style: TextStyle(color: cs.outline)))
                       : ListView.builder(
                           padding: const EdgeInsets.symmetric(
@@ -87,8 +88,8 @@ class _TabsDrawerState extends State<TabsDrawer> {
             child: TextField(
               autofocus: true,
               onChanged: (v) => setState(() => _query = v),
-              decoration: const InputDecoration(
-                hintText: 'Search tabs',
+              decoration: InputDecoration(
+                hintText: tr('Search tabs'),
                 isDense: true,
                 prefixIcon: Icon(Icons.search_rounded, size: 20),
               ),
@@ -110,11 +111,11 @@ class _TabsDrawerState extends State<TabsDrawer> {
         Icon(Icons.view_list_rounded, color: cs.primary),
         const SizedBox(width: 12),
         const Expanded(
-          child: Text('Tabs',
+          child: T('Tabs',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ),
         IconButton(
-          tooltip: 'Search tabs',
+          tooltip: tr('Search tabs'),
           icon: const Icon(Icons.search_rounded),
           onPressed: () => setState(() => _searching = true),
         ),
@@ -157,8 +158,8 @@ class _TabsDrawerState extends State<TabsDrawer> {
   Widget _action(IconData icon, String tip, VoidCallback? onTap,
       {bool filled = false}) {
     return filled
-        ? IconButton.filled(tooltip: tip, icon: Icon(icon), onPressed: onTap)
-        : IconButton(tooltip: tip, icon: Icon(icon), onPressed: onTap);
+        ? IconButton.filled(tooltip: tr(tip), icon: Icon(icon), onPressed: onTap)
+        : IconButton(tooltip: tr(tip), icon: Icon(icon), onPressed: onTap);
   }
 }
 
@@ -188,7 +189,7 @@ class _TabTile extends StatelessWidget {
       builder: (context, _) {
         final loading = tab.isLoading;
         final subtitle = tab.url.isEmpty
-            ? 'Homepage'
+            ? tr('Homepage')
             : (tab.host.isNotEmpty ? tab.host : tab.url);
         return Container(
           margin: const EdgeInsets.symmetric(vertical: 3),
@@ -232,7 +233,7 @@ class _TabTile extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 loading
-                                    ? 'Loading… ${tab.progress}%'
+                                    ? '${tr('Loading…')} ${tab.progress}%'
                                     : subtitle,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -246,7 +247,7 @@ class _TabTile extends StatelessWidget {
                           ),
                         ),
                         IconButton(
-                          tooltip: 'Close tab',
+                          tooltip: tr('Close tab'),
                           icon: const Icon(Icons.close_rounded, size: 20),
                           onPressed: onClose,
                         ),

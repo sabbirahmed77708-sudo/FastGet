@@ -1,6 +1,9 @@
 package __PACKAGE__
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -23,6 +26,21 @@ class MainActivity : FlutterActivity() {
         }
         channel = ch
         pending = sharedText(intent)
+
+        // Wi-Fi only: lets Dart ask whether the active network is Wi-Fi/Ethernet.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "drox/net")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "isWifi") result.success(onUnmeteredLink())
+                else result.notImplemented()
+            }
+    }
+
+    private fun onUnmeteredLink(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val net = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(net) ?: return false
+        return caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
     }
 
     override fun onNewIntent(intent: Intent) {

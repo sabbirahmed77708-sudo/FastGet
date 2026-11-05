@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,10 +73,21 @@ class DownloadManager extends ChangeNotifier {
   SharedPreferences? _prefs;
   String? _dir;
 
+  // Wi-Fi only: when ON, downloads run only on Wi-Fi / Ethernet.
+  static const MethodChannel _net = MethodChannel('drox/net');
+  bool wifiOnly = false;
+  final Set<String> _waitingForWifi = {};
+  Timer? _wifiTimer;
+
+  bool isWaitingForWifi(DownloadItem d) => _waitingForWifi.contains(d.id);
+
   // ---------------------------------------------------------------- init
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    wifiOnly = _prefs!.getBool('wifi_only') ?? false;
+    _wifiTimer ??=
+        Timer.periodic(const Duration(seconds: 5), (_) => _wifiTick());
     final raw = _prefs!.getString('items');
     if (raw != null) {
       try {
@@ -166,6 +178,92 @@ class DownloadManager extends ChangeNotifier {
   void start(DownloadItem item) {
     if (_runs.containsKey(item.id)) return;
     if (item.status == DlStatus.completed) return;
+    if (wifiOnly) {
+      // Decide asynchronously; the item shows "Waiting for Wi-Fi" meanwhile.
+      _startWhenAllowed(item);
+      return;
+    }
+    _begin(item);
+  }
+
+  Future<void> _startWhenAllowed(DownloadItem item) async {
+    if (await _onWifi()) {
+      _waitingForWifi.remove(item.id);
+      _begin(item);
+    } else {
+      item.status = DlStatus.paused;
+      item.speed = 0;
+      _waitingForWifi.add(item.id);
+      notifyListeners();
+      await _save();
+    }
+  }
+
+  Future<bool> _onWifi() async {
+    try {
+      return await _net.invokeMethod<bool>('isWifi') ?? true;
+    } catch (_) {
+      return true; // not Android, or channel missing: don't block downloads
+    }
+  }
+
+  Future<void> setWifiOnly(bool v) async {
+    wifiOnly = v;
+    await _prefs?.setBool('wifi_only', v);
+    notifyListeners();
+    await _wifiTick();
+  }
+
+  Future<void> _wifiTick() async {
+    if (!wifiOnly) {
+      if (_waitingForWifi.isEmpty) return;
+      final ids = _waitingForWifi.toList();
+      _waitingForWifi.clear();
+      for (final it in items.where((e) => ids.contains(e.id))) {
+        _begin(it);
+      }
+      return;
+    }
+    final wifi = await _onWifi();
+    if (!wifi) {
+      for (final it in items
+          .where((e) => e.status == DlStatus.downloading)
+          .toList()) {
+        _waitingForWifi.add(it.id);
+        pause(it);
+      }
+    } else if (_waitingForWifi.isNotEmpty) {
+      final ids = _waitingForWifi.toList();
+      _waitingForWifi.clear();
+      for (final it in items.where((e) => ids.contains(e.id))) {
+        _begin(it);
+      }
+    }
+  }
+
+  /// Deletes what was downloaded so far and starts the file again from zero.
+  Future<void> redownload(DownloadItem item) async {
+    final run = _runs[item.id];
+    run?.token.cancel('redownload');
+    _waitingForWifi.remove(item.id);
+    item.status = DlStatus.paused;
+    item.speed = 0;
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 400));
+    await _deleteParts(item);
+    try {
+      final f = File(item.savePath);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
+    item.downloaded = 0;
+    item.error = null;
+    await _save();
+    notifyListeners();
+    start(item);
+  }
+
+  void _begin(DownloadItem item) {
+    if (_runs.containsKey(item.id)) return;
     item.status = DlStatus.downloading;
     item.error = null;
     final run = _Run();

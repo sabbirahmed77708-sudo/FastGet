@@ -4,6 +4,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../l10n.dart';
 
 /// A download the browser wants to hand over to DROX.
 class DownloadRequest {
@@ -157,7 +158,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                 Row(children: [
                   Icon(Icons.bolt_rounded, color: cs.primary),
                   const SizedBox(width: 6),
-                  const Text('DROX Download',
+                  const T('DROX Download',
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
                 ]),
@@ -185,7 +186,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                         const SizedBox(height: 4),
                         Text(
                           '${_typeLabel(name, mime)} · '
-                          '${size > 0 ? formatBytes(size) : (loading ? 'checking…' : 'size unknown')}',
+                          '${size > 0 ? formatBytes(size) : (loading ? tr('checking…') : tr('size unknown'))}',
                           style: TextStyle(
                               color: cs.onSurfaceVariant, fontSize: 13),
                         ),
@@ -199,8 +200,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                 if (info != null && !info.range && !blocked)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                        'This server does not support fast multi-part download or resume.',
+                    child: T('This server does not support fast multi-part download or resume.',
                         style: TextStyle(color: cs.outline, fontSize: 12)),
                   ),
                 if (isPage)
@@ -214,7 +214,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                   children: [
                     TextButton(
                         onPressed: () => Navigator.pop(context, false),
-                        child: const Text('Cancel')),
+                        child: const T('Cancel')),
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: (_busy || loading || blocked) ? null : _start,
@@ -225,7 +225,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                               child:
                                   CircularProgressIndicator(strokeWidth: 2))
                           : const Icon(Icons.download_rounded),
-                      label: const Text('Download'),
+                      label: const T('Download'),
                     ),
                   ],
                 ),
@@ -245,7 +245,7 @@ class _PromptSheetState extends State<_PromptSheet> {
             Icon(Icons.error_outline_rounded, size: 18, color: cs.error),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(text,
+                child: Text(tr(text),
                     style: TextStyle(color: cs.error, fontSize: 13))),
           ],
         ),

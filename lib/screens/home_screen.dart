@@ -5,7 +5,10 @@ import 'package:open_filex/open_filex.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
+import 'app_settings_screen.dart';
+import '../l10n.dart';
 
 enum _Filter { all, active, completed }
 
@@ -61,10 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('New download',
+            const T('New download',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('Paste a direct link to a file',
+            T('Paste a direct link to a file',
                 style: TextStyle(
                     color: Theme.of(ctx).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 16),
@@ -75,10 +78,10 @@ class _HomeScreenState extends State<HomeScreen> {
               minLines: 1,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'https://example.com/file.zip',
+                hintText: tr('https://example.com/file.zip'),
                 prefixIcon: const Icon(Icons.link_rounded),
                 suffixIcon: IconButton(
-                  tooltip: 'Paste',
+                  tooltip: tr('Paste'),
                   icon: const Icon(Icons.content_paste_rounded),
                   onPressed: () async {
                     final c = await Clipboard.getData('text/plain');
@@ -94,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: FilledButton.icon(
                 onPressed: () => Navigator.pop(ctx, ctrl.text),
                 icon: const Icon(Icons.download_rounded),
-                label: const Text('Start download'),
+                label: const T('Start download'),
               ),
             ),
           ],
@@ -113,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: Text(e.toString()),
+          content: Text(tr(e.toString())),
         ),
       );
     }
@@ -135,19 +138,24 @@ class _HomeScreenState extends State<HomeScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
+              leading: const Icon(Icons.refresh_rounded),
+              title: const T('Redownload'),
+              onTap: () => Navigator.pop(ctx, 'redo'),
+            ),
+            ListTile(
               leading: const Icon(Icons.link_rounded),
-              title: const Text('Copy link'),
+              title: const T('Copy link'),
               onTap: () => Navigator.pop(ctx, 'copy'),
             ),
             ListTile(
               leading: const Icon(Icons.playlist_remove_rounded),
-              title: const Text('Remove from list'),
+              title: const T('Remove from list'),
               onTap: () => Navigator.pop(ctx, 'remove'),
             ),
             ListTile(
               leading: Icon(Icons.delete_outline_rounded,
                   color: Theme.of(ctx).colorScheme.error),
-              title: Text('Delete file too',
+              title: T('Delete file too',
                   style: TextStyle(color: Theme.of(ctx).colorScheme.error)),
               onTap: () => Navigator.pop(ctx, 'delete'),
             ),
@@ -160,12 +168,117 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             behavior: SnackBarBehavior.floating,
-            content: Text('Link copied')));
+            content: T('Link copied')));
       }
+    } else if (choice == 'redo') {
+      await _redownload(d);
     } else if (choice == 'remove') {
       await dm.remove(d);
     } else if (choice == 'delete') {
       await dm.remove(d, deleteFile: true);
+    }
+  }
+
+  Future<void> _redownload(DownloadItem d) async {
+    if (d.downloaded > 0 || d.status == DlStatus.completed) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const T('Redownload this file?'),
+          content: const T(
+              'The partial or finished file will be deleted and downloaded again.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const T('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const T('Redownload')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    await dm.redownload(d);
+  }
+
+  // ------------------------------------------------------------ app menu
+
+  Widget _appMenu() {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    PopupMenuItem<String> entry(String value, IconData icon, String label,
+        {IconData? trailing, String? note}) {
+      return PopupMenuItem<String>(
+        value: value,
+        child: Row(
+          children: [
+            Icon(icon, size: 22),
+            const SizedBox(width: 14),
+            Expanded(child: Text(tr(label))),
+            if (note != null)
+              Text(note,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.outline)),
+            if (trailing != null) Icon(trailing, size: 22),
+          ],
+        ),
+      );
+    }
+
+    return PopupMenuButton<String>(
+      tooltip: tr('More'),
+      icon: const Icon(Icons.more_vert_rounded),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      onSelected: _onMenu,
+      itemBuilder: (_) => [
+        entry('wifi', Icons.wifi_rounded, 'Wi-Fi only',
+            trailing: dm.wifiOnly
+                ? Icons.check_box_rounded
+                : Icons.check_box_outline_blank_rounded),
+        entry('theme', dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            dark ? 'Light mode' : 'Night mode'),
+        entry('lang', Icons.language_rounded, 'Language',
+            note: L10n.instance.isBn ? 'বাংলা' : 'English'),
+        const PopupMenuDivider(),
+        entry('settings', Icons.settings_outlined, 'Settings'),
+        entry('about', Icons.info_outline_rounded, 'About'),
+        entry('exit', Icons.exit_to_app_rounded, 'Exit'),
+      ],
+    );
+  }
+
+  Future<void> _onMenu(String v) async {
+    switch (v) {
+      case 'wifi':
+        await dm.setWifiOnly(!dm.wifiOnly);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content:
+              Text(tr(dm.wifiOnly ? 'Wi-Fi only is on' : 'Wi-Fi only is off')),
+        ));
+        break;
+      case 'theme':
+        final dark = Theme.of(context).brightness == Brightness.dark;
+        await BrowserController.instance
+            .setThemeMode(dark ? ThemeMode.light : ThemeMode.dark);
+        break;
+      case 'lang':
+        await showLanguageDialog(context);
+        break;
+      case 'settings':
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(builder: (_) => const AppSettingsScreen()),
+        );
+        break;
+      case 'about':
+        showAboutDrox(context);
+        break;
+      case 'exit':
+        await SystemNavigator.pop();
+        break;
     }
   }
 
@@ -191,15 +304,17 @@ class _HomeScreenState extends State<HomeScreen> {
     final items = _visible;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.embedded ? 'Downloads' : 'DROX'),
+        title: Text(widget.embedded ? tr('Downloads') : 'DROX'),
         actions: [
-          if (!widget.embedded)
+          if (!widget.embedded) ...[
             IconButton.filledTonal(
-              tooltip: 'Browser',
-              icon: const Icon(Icons.explore_outlined),
+              tooltip: tr('Browser'),
+              icon: const Icon(Icons.public_rounded),
               onPressed: _openBrowser,
             ),
-          const SizedBox(width: 12),
+            _appMenu(),
+          ],
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -221,7 +336,7 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddSheet,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add link',
+        label: const T('Add link',
             style: TextStyle(fontWeight: FontWeight.w600)),
       ),
     );
@@ -252,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Current speed',
+                T('Current speed',
                     style: TextStyle(
                         color: cs.onPrimary.withValues(alpha: 0.8),
                         fontSize: 13)),
@@ -281,7 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   color: cs.onPrimary,
                   fontSize: 22,
                   fontWeight: FontWeight.w700)),
-          Text(label,
+          Text(tr(label),
               style: TextStyle(
                   color: cs.onPrimary.withValues(alpha: 0.8), fontSize: 12)),
         ],
@@ -291,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Widget chip(String label, _Filter f) => Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ChoiceChip(
-            label: Text(label),
+            label: Text(tr(label)),
             selected: _filter == f,
             showCheckmark: false,
             shape: RoundedRectangleBorder(
@@ -329,11 +444,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 44, color: cs.primary),
             ),
             const SizedBox(height: 18),
-            const Text('No downloads here',
+            const T('No downloads here',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
             Text(
-              'Tap "Add link" to paste a file URL,\nor use the browser to find files.',
+              tr('Tap "Add link" to paste a file URL,\nor use the browser to find files.'),
               textAlign: TextAlign.center,
               style: TextStyle(color: cs.onSurfaceVariant, height: 1.4),
             ),
@@ -351,19 +466,22 @@ class _HomeScreenState extends State<HomeScreen> {
     final failed = d.status == DlStatus.failed;
 
     final sizeText = d.total > 0
-        ? '${formatBytes(d.downloaded)} of ${formatBytes(d.total)}'
+        ? trOf(formatBytes(d.downloaded), formatBytes(d.total))
         : formatBytes(d.downloaded);
 
     String status;
     Color statusColor = cs.onSurfaceVariant;
     if (done) {
-      status = 'Completed · ${formatBytes(d.total > 0 ? d.total : d.downloaded)}';
+      status =
+          '${tr('Completed')} · ${formatBytes(d.total > 0 ? d.total : d.downloaded)}';
       statusColor = const Color(0xFF16A34A);
     } else if (failed) {
-      status = d.error ?? 'Failed';
+      status = tr(d.error ?? 'Failed');
       statusColor = cs.error;
     } else if (d.status == DlStatus.paused) {
-      status = 'Paused · $sizeText';
+      status = dm.isWaitingForWifi(d)
+          ? '${tr('Waiting for Wi-Fi')} · $sizeText'
+          : '${tr('Paused')} · $sizeText';
     } else {
       status = '$sizeText · ${formatBytes(d.speed)}/s · ${formatEta(d)}';
     }
@@ -410,26 +528,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (done)
                     IconButton(
-                      tooltip: 'Open',
+                      tooltip: tr('Open'),
                       icon: const Icon(Icons.open_in_new_rounded),
                       onPressed: () => OpenFilex.open(d.savePath),
                     )
                   else if (running)
                     IconButton.filledTonal(
-                      tooltip: 'Pause',
+                      tooltip: tr('Pause'),
                       icon: const Icon(Icons.pause_rounded),
                       onPressed: () => dm.pause(d),
                     )
                   else
                     IconButton.filledTonal(
-                      tooltip: failed ? 'Retry' : 'Resume',
+                      tooltip: failed ? tr('Retry') : tr('Resume'),
                       icon: Icon(failed
                           ? Icons.refresh_rounded
                           : Icons.play_arrow_rounded),
                       onPressed: () => dm.start(d),
                     ),
                   IconButton(
-                    tooltip: 'More',
+                    tooltip: tr('More'),
                     icon: const Icon(Icons.more_vert_rounded),
                     onPressed: () => _confirmRemove(d),
                   ),
@@ -460,7 +578,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 fontWeight: FontWeight.w600,
                                 color: cs.onSurfaceVariant)),
                         if (!d.rangeSupported)
-                          Text('Single stream · no resume',
+                          T('Single stream · no resume',
                               style: TextStyle(
                                   fontSize: 11, color: cs.outline)),
                       ],

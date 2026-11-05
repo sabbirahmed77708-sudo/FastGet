@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'browser_controller.dart';
+import '../l10n.dart';
 
 /// Browser start page: wordmark, search field and editable shortcuts.
 class HomePage extends StatefulWidget {
@@ -36,29 +37,29 @@ class _HomePageState extends State<HomePage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add shortcut'),
+        title: const T('Add shortcut'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: name,
-              decoration: const InputDecoration(hintText: 'Name'),
+              decoration: InputDecoration(hintText: tr('Name')),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: url,
               keyboardType: TextInputType.url,
-              decoration: const InputDecoration(hintText: 'Website address'),
+              decoration: InputDecoration(hintText: tr('Website address')),
             ),
           ],
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: const T('Cancel')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Add')),
+              child: const T('Add')),
         ],
       ),
     );
@@ -83,7 +84,7 @@ class _HomePageState extends State<HomePage> {
               children: [
                 _wordmark(cs),
                 const SizedBox(height: 6),
-                Text('Fast. Private. Yours.',
+                T('Fast. Private. Yours.',
                     style: TextStyle(color: cs.onSurfaceVariant)),
                 const SizedBox(height: 32),
                 Container(
@@ -109,11 +110,11 @@ class _HomePageState extends State<HomePage> {
                     keyboardType: TextInputType.url,
                     onSubmitted: (_) => _search(),
                     decoration: InputDecoration(
-                      hintText: 'Search or type a URL',
+                      hintText: tr('Search or type a URL'),
                       filled: false,
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: IconButton(
-                        tooltip: 'Search',
+                        tooltip: tr('Search'),
                         icon: Icon(Icons.arrow_forward_rounded,
                             color: cs.primary),
                         onPressed: _search,
@@ -177,14 +178,14 @@ class _HomePageState extends State<HomePage> {
           final del = await showDialog<bool>(
             context: context,
             builder: (ctx) => AlertDialog(
-              title: Text('Remove "${s.name}"?'),
+              title: Text('${tr('Remove')} "${s.name}"?'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Cancel')),
+                    child: const T('Cancel')),
                 FilledButton(
                     onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text('Remove')),
+                    child: const T('Remove')),
               ],
             ),
           );
@@ -234,7 +235,7 @@ class _HomePageState extends State<HomePage> {
                 child: Icon(Icons.add_rounded, color: cs.onSurfaceVariant),
               ),
               const SizedBox(height: 6),
-              const Text('Add shortcut',
+              const T('Add shortcut',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12)),
