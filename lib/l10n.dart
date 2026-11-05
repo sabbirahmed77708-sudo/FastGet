@@ -218,6 +218,7 @@ const Map<String, String> _bn = {
       'আপডেট ডাউনলোডে যোগ হয়েছে। শেষ হলে খুলে ইনস্টল করুন।',
   // --- download popup / folder picker
   'Download file': 'ফাইল ডাউনলোড',
+  'Rename': 'নাম বদলান',
   'File name': 'ফাইলের নাম',
   'Size': 'সাইজ',
   'Type': 'ধরন',

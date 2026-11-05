@@ -53,26 +53,38 @@ const List<(String, String)> _quickFolders = [
   ('Documents', '$kStorageRoot/Documents'),
 ];
 
-/// Shows the DROM download popup: it floats up from the bottom and lists every
-/// detail of the file, lets the person rename it and pick where it is saved.
+/// Shows the DROM download popup as a box in the middle of the screen. It
+/// floats up with a soft bounce, lists every detail of the file, lets the
+/// person rename it and pick where it is saved.
 /// Returns true when the download started.
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showGeneralDialog<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    sheetAnimationStyle: const AnimationStyle(
-      duration: Duration(milliseconds: 450),
-      reverseDuration: Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    ),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    ),
-    builder: (_) => _PromptSheet(req: req),
+    barrierDismissible: true,
+    barrierLabel: 'Dismiss',
+    barrierColor: Colors.black.withValues(alpha: 0.55),
+    transitionDuration: const Duration(milliseconds: 460),
+    pageBuilder: (_, __, ___) => _PromptSheet(req: req),
+    transitionBuilder: (context, anim, _, child) {
+      final pop = CurvedAnimation(
+          parent: anim,
+          curve: Curves.easeOutBack,
+          reverseCurve: Curves.easeInCubic);
+      final fade = CurvedAnimation(parent: anim, curve: Curves.easeOut);
+      return FadeTransition(
+        opacity: fade,
+        child: SlideTransition(
+          position: Tween<Offset>(
+                  begin: const Offset(0, 0.10), end: Offset.zero)
+              .animate(pop),
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.82, end: 1.0).animate(pop),
+            child: child,
+          ),
+        ),
+      );
+    },
   );
   return result == true;
 }
@@ -89,6 +101,7 @@ class _PromptSheetState extends State<_PromptSheet> {
   late final Future<ProbeResult> _probe;
   late final TextEditingController _nameCtrl;
   bool _nameEdited = false;
+  bool _editing = false;
   String? _dir;
   bool _busy = false;
   bool _copied = false;
@@ -216,11 +229,6 @@ class _PromptSheetState extends State<_PromptSheet> {
         final host = Uri.tryParse(r.url)?.host ?? r.url;
 
         final rows = <Widget>[
-          _row(cs, Icons.straighten_rounded, 'Size',
-              size > 0
-                  ? formatBytes(size)
-                  : (loading ? tr('checking…') : tr('size unknown'))),
-          _row(cs, Icons.category_outlined, 'Type', _typeLabel(name, mime)),
           _row(cs, Icons.public_rounded, 'Source', host),
           _row(
             cs,
@@ -237,6 +245,7 @@ class _PromptSheetState extends State<_PromptSheet> {
             Icons.link_rounded,
             'Link',
             r.url,
+            maxLines: 3,
             onTap: _copyLink,
             trailing: Icon(
               _copied ? Icons.check_rounded : Icons.copy_rounded,
@@ -246,145 +255,228 @@ class _PromptSheetState extends State<_PromptSheet> {
           ),
         ];
 
-        return SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-                20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Appear(
-                  key: const ValueKey('head'),
-                  index: 0,
-                  child: Row(children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: cs.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(Icons.download_rounded, color: cs.primary),
-                    ),
-                    const SizedBox(width: 10),
-                    const Expanded(
-                      child: T('Download file',
-                          style: TextStyle(
-                              fontSize: 19, fontWeight: FontWeight.w700)),
-                    ),
-                    IconButton(
-                      tooltip: tr('Cancel'),
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed:
-                          _busy ? null : () => Navigator.pop(context, false),
-                    ),
-                  ]),
-                ),
-                const SizedBox(height: 14),
-                _Appear(
-                  key: const ValueKey('file'),
-                  index: 1,
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: kind.color.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(kind.icon, color: kind.color, size: 29),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: TextField(
-                        controller: _nameCtrl,
-                        minLines: 1,
-                        maxLines: 3,
-                        onChanged: (_) => setState(() => _nameEdited = true),
-                        decoration: InputDecoration(
-                          labelText: tr('File name'),
-                          isDense: true,
+        return Center(
+          child: Dialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+            elevation: 8,
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            surfaceTintColor: Colors.transparent,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _Appear(
+                      key: const ValueKey('head'),
+                      index: 0,
+                      child: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: cs.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child:
+                              Icon(Icons.download_rounded, color: cs.primary),
                         ),
-                      ),
-                    ),
-                  ]),
-                ),
-                const SizedBox(height: 14),
-                _Appear(
-                  key: const ValueKey('details'),
-                  index: 2,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: cs.outlineVariant),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(children: [
-                      for (var i = 0; i < rows.length; i++) ...[
-                        if (i > 0)
-                          Divider(
-                              height: 1,
-                              indent: 14,
-                              endIndent: 14,
-                              color: cs.outlineVariant),
-                        rows[i],
-                      ],
-                    ]),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _Appear(
-                  key: const ValueKey('save'),
-                  index: 3,
-                  child: _saveSection(cs),
-                ),
-                if (isPage)
-                  _note(cs,
-                      'This link returns a web page, not a downloadable file.'),
-                if (probeError != null) _note(cs, probeError),
-                if (_error != null) _note(cs, _error!),
-                const SizedBox(height: 18),
-                _Appear(
-                  key: const ValueKey('buttons'),
-                  index: 4,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: T('Download file',
+                              style: TextStyle(
+                                  fontSize: 19, fontWeight: FontWeight.w700)),
+                        ),
+                        IconButton(
+                          tooltip: tr('Cancel'),
+                          icon: const Icon(Icons.close_rounded),
                           onPressed: _busy
                               ? null
                               : () => Navigator.pop(context, false),
-                          child: const T('Cancel'),
                         ),
+                      ]),
+                    ),
+                    const SizedBox(height: 14),
+                    _Appear(
+                      key: const ValueKey('file'),
+                      index: 1,
+                      child: _fileCard(cs, kind, name, mime, size, loading),
+                    ),
+                    const SizedBox(height: 12),
+                    _Appear(
+                      key: const ValueKey('details'),
+                      index: 2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: cs.outlineVariant),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(children: [
+                          for (var i = 0; i < rows.length; i++) ...[
+                            if (i > 0)
+                              Divider(
+                                  height: 1,
+                                  indent: 14,
+                                  endIndent: 14,
+                                  color: cs.outlineVariant),
+                            rows[i],
+                          ],
+                        ]),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: FilledButton.icon(
-                          onPressed:
-                              (_busy || loading || blocked || _dir == null)
+                    ),
+                    const SizedBox(height: 16),
+                    _Appear(
+                      key: const ValueKey('save'),
+                      index: 3,
+                      child: _saveSection(cs),
+                    ),
+                    if (isPage)
+                      _note(cs,
+                          'This link returns a web page, not a downloadable file.'),
+                    if (probeError != null) _note(cs, probeError),
+                    if (_error != null) _note(cs, _error!),
+                    const SizedBox(height: 18),
+                    _Appear(
+                      key: const ValueKey('buttons'),
+                      index: 4,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () => Navigator.pop(context, false),
+                              child: const T('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: FilledButton.icon(
+                              onPressed: (_busy ||
+                                      loading ||
+                                      blocked ||
+                                      _dir == null)
                                   ? null
                                   : _start,
-                          icon: _busy
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2))
-                              : const Icon(Icons.download_rounded),
-                          label: Text(size > 0
-                              ? '${tr('Download')} · ${formatBytes(size)}'
-                              : tr('Download')),
-                        ),
+                              icon: _busy
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Icon(Icons.download_rounded),
+                              label: Text(size > 0
+                                  ? '${tr('Download')} · ${formatBytes(size)}'
+                                  : tr('Download')),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// The file: icon, the FULL file name (wraps, never cut), type and size.
+  Widget _fileCard(ColorScheme cs, FileKind kind, String name, String? mime,
+      int size, bool loading) {
+    Widget chip(IconData icon, String text) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: kind.color.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(icon, size: 14, color: kind.color),
+            const SizedBox(width: 5),
+            Text(text,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: kind.color)),
+          ]),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kind.color.withValues(alpha: 0.07),
+        border: Border.all(color: kind.color.withValues(alpha: 0.25)),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: kind.color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(kind.icon, color: kind.color, size: 28),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_editing)
+                  TextField(
+                    controller: _nameCtrl,
+                    autofocus: true,
+                    minLines: 1,
+                    maxLines: null,
+                    onChanged: (_) => setState(() => _nameEdited = true),
+                    decoration: InputDecoration(
+                      labelText: tr('File name'),
+                      isDense: true,
+                    ),
+                  )
+                else
+                  SelectableText(
+                    name,
+                    style: const TextStyle(
+                        fontSize: 15.5, fontWeight: FontWeight.w700, height: 1.3),
+                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    chip(Icons.description_outlined, _typeLabel(name, mime)),
+                    chip(
+                        Icons.straighten_rounded,
+                        size > 0
+                            ? formatBytes(size)
+                            : (loading
+                                ? tr('checking…')
+                                : tr('size unknown'))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: tr(_editing ? 'Done' : 'Rename'),
+            visualDensity: VisualDensity.compact,
+            icon: Icon(_editing ? Icons.check_rounded : Icons.edit_rounded,
+                size: 20),
+            onPressed: _busy ? null : () => setState(() => _editing = !_editing),
+          ),
+        ],
+      ),
     );
   }
 
@@ -468,7 +560,7 @@ class _PromptSheetState extends State<_PromptSheet> {
   }
 
   Widget _row(ColorScheme cs, IconData icon, String label, String value,
-      {Widget? trailing, VoidCallback? onTap}) {
+      {Widget? trailing, VoidCallback? onTap, int maxLines = 2}) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -485,7 +577,7 @@ class _PromptSheetState extends State<_PromptSheet> {
             ),
             Expanded(
               child: Text(value,
-                  maxLines: 2,
+                  maxLines: maxLines,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       fontWeight: FontWeight.w600, fontSize: 13.5)),
