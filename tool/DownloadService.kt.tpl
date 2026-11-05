@@ -27,10 +27,14 @@ class DownloadService : Service() {
         const val CHANNEL_PROGRESS = "drom_downloads"
         const val CHANNEL_DONE = "drom_done"
         const val NOTIF_ID = 4711
+        const val GROUP = "drom_downloads_group"
+        const val EXTRA_KEY = "key"
 
         const val ACTION_UPDATE = "app.drom.UPDATE"
         const val ACTION_PAUSE = "app.drom.PAUSE_ALL"
         const val ACTION_RESUME = "app.drom.RESUME_ALL"
+        const val ACTION_PAUSE_ONE = "app.drom.PAUSE_ONE"
+        const val ACTION_RESUME_ONE = "app.drom.RESUME_ONE"
 
         @Volatile var instance: DownloadService? = null
 
@@ -53,8 +57,7 @@ class DownloadService : Service() {
             nm.createNotificationChannel(done)
         }
 
-        fun bundleOf(m: Map<String, Any?>): Bundle {
-            val b = Bundle()
+        private fun fill(b: Bundle, m: Map<*, *>) {
             b.putString("title", m["title"] as? String ?: "DROM")
             b.putString("text", m["text"] as? String ?: "")
             b.putInt("progress", (m["progress"] as? Number)?.toInt() ?: 0)
@@ -62,8 +65,23 @@ class DownloadService : Service() {
             b.putBoolean("indeterminate", m["indeterminate"] as? Boolean ?: false)
             b.putBoolean("paused", m["paused"] as? Boolean ?: false)
             b.putString("actionLabel", m["actionLabel"] as? String ?: "")
-            val lines = (m["lines"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
-            b.putStringArrayList("lines", ArrayList(lines))
+        }
+
+        /** Top-level bundle: the main notification + one bundle per download. */
+        fun bundleOf(m: Map<String, Any?>): Bundle {
+            val b = Bundle()
+            fill(b, m)
+            (m["actionKey"] as? String)?.let { b.putString("actionKey", it) }
+            val list = ArrayList<Bundle>()
+            for (e in (m["items"] as? List<*>) ?: emptyList<Any>()) {
+                val im = e as? Map<*, *> ?: continue
+                val ib = Bundle()
+                fill(ib, im)
+                ib.putString("key", im["key"] as? String ?: continue)
+                ib.putInt("nid", (im["nid"] as? Number)?.toInt() ?: continue)
+                list.add(ib)
+            }
+            b.putParcelableArrayList("items", list)
             return b
         }
 
@@ -73,6 +91,7 @@ class DownloadService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private val shown = HashSet<Int>() // ids of the per-download notifications
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -86,6 +105,10 @@ class DownloadService : Service() {
         when (intent?.action) {
             ACTION_PAUSE -> onAction?.invoke("pauseAll")
             ACTION_RESUME -> onAction?.invoke("resumeAll")
+            ACTION_PAUSE_ONE ->
+                intent?.getStringExtra(EXTRA_KEY)?.let { onAction?.invoke("pause:$it") }
+            ACTION_RESUME_ONE ->
+                intent?.getStringExtra(EXTRA_KEY)?.let { onAction?.invoke("resume:$it") }
             ACTION_UPDATE -> {
                 val extras = intent?.extras
                 if (extras != null) show(extras) else ensureForeground()
@@ -99,23 +122,43 @@ class DownloadService : Service() {
         show(bundleOf(mapOf("title" to "DROM", "text" to "")))
     }
 
+    @Suppress("DEPRECATION")
     fun show(b: Bundle) {
         val paused = b.getBoolean("paused")
-        val n = build(b)
+        val items: List<Bundle> = b.getParcelableArrayList<Bundle>("items") ?: arrayListOf()
+        val multi = items.size > 1
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        // main notification: a summary when there are several downloads
+        val main = build(b, isSummary = multi, isChild = false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            startForeground(NOTIF_ID, main, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
-            startForeground(NOTIF_ID, n)
+            startForeground(NOTIF_ID, main)
         }
+
+        // one notification per download, each with its own Pause / Resume
+        val now = HashSet<Int>()
+        if (multi) {
+            for (item in items) {
+                val nid = item.getInt("nid")
+                now.add(nid)
+                nm.notify(nid, build(item, isSummary = false, isChild = true))
+            }
+        }
+        for (old in shown) if (!now.contains(old)) nm.cancel(old)
+        shown.clear()
+        shown.addAll(now)
+
         // Keep the CPU awake while bytes are flowing (refreshed on every update).
         if (paused) releaseWakeLock() else holdWakeLock()
     }
 
-    private fun build(b: Bundle): Notification {
+    private fun build(b: Bundle, isSummary: Boolean, isChild: Boolean): Notification {
         val paused = b.getBoolean("paused")
-        val lines = b.getStringArrayList("lines") ?: arrayListOf()
         val text = b.getString("text") ?: ""
         val label = b.getString("actionLabel") ?: ""
+        val key = b.getString("key") ?: b.getString("actionKey")
 
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
@@ -125,10 +168,18 @@ class DownloadService : Service() {
         }
         val openPi = if (open != null) PendingIntent.getActivity(this, 0, open, flags) else null
 
-        val actionIntent = Intent(this, DownloadService::class.java).apply {
-            action = if (paused) ACTION_RESUME else ACTION_PAUSE
+        // button: one download (key) or all downloads
+        val actionIntent = Intent(this, DownloadService::class.java)
+        val reqCode: Int
+        if (key != null) {
+            actionIntent.action = if (paused) ACTION_RESUME_ONE else ACTION_PAUSE_ONE
+            actionIntent.putExtra(EXTRA_KEY, key)
+            reqCode = if (isChild) b.getInt("nid") else 2
+        } else {
+            actionIntent.action = if (paused) ACTION_RESUME else ACTION_PAUSE
+            reqCode = 1
         }
-        val actionPi = PendingIntent.getService(this, 1, actionIntent, flags)
+        val actionPi = PendingIntent.getService(this, reqCode, actionIntent, flags)
 
         val builder = NotificationCompat.Builder(this, CHANNEL_PROGRESS)
             .setSmallIcon(
@@ -137,6 +188,7 @@ class DownloadService : Service() {
             )
             .setContentTitle(b.getString("title"))
             .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
@@ -150,20 +202,18 @@ class DownloadService : Service() {
             )
         if (openPi != null) builder.setContentIntent(openPi)
 
+        if (isSummary || isChild) {
+            builder.setGroup(GROUP)
+            builder.setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
+            if (isSummary) builder.setGroupSummary(true)
+        }
+
         if (!paused) {
             builder.setProgress(
                 b.getInt("max", 100),
                 b.getInt("progress", 0),
                 b.getBoolean("indeterminate")
             )
-        }
-
-        if (lines.size > 1) {
-            val style = NotificationCompat.InboxStyle()
-            for (l in lines) style.addLine(l)
-            builder.setStyle(style)
-        } else {
-            builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
         }
         return builder.build()
     }
@@ -187,6 +237,12 @@ class DownloadService : Service() {
 
     fun shutdown() {
         releaseWakeLock()
+        try {
+            val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            for (id in shown) nm.cancel(id)
+        } catch (_: Exception) {
+        }
+        shown.clear()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(Service.STOP_FOREGROUND_REMOVE)
         } else {

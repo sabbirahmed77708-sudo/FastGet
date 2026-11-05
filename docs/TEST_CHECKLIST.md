@@ -48,8 +48,10 @@ this list on a real phone and report anything that fails.
 
 ## Notifications and background
 - [ ] Start a big download: the notification bar shows the file name, "NN% - X MB / Y MB - speed" and a progress bar.
-- [ ] Start two downloads: one notification, "2 downloads", expanded view lists both.
-- [ ] Press Pause all in the notification: downloads stop, button changes to Resume all; Resume all continues them.
+- [ ] Start two downloads: each gets its own notification, plus a "2 downloads" summary with Pause all.
+- [ ] Press Pause on ONE download's notification: only that one stops, its button changes to Resume, the other keeps going.
+- [ ] Press Resume on it: it continues. Pause all / Resume all in the summary affect every download.
+- [ ] Pause the only running download from its notification: the notification stays (paused) with Resume.
 - [ ] Press Home: the download keeps going.
 - [ ] Swipe the app away from recent apps: the notification stays and the download keeps going.
 - [ ] Open the app again from the notification: it shows the running downloads.
