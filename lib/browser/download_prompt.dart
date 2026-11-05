@@ -35,6 +35,9 @@ String _guessName(String url) {
   return n.isEmpty ? 'download' : n;
 }
 
+bool _looksLikeFileName(String n) =>
+    RegExp(r'\.[A-Za-z0-9]{1,5}$').hasMatch(n);
+
 String _typeLabel(String name, String? mime) {
   final e = name.contains('.') ? name.split('.').last.toUpperCase() : '';
   if (e.isNotEmpty && e.length <= 5) return '$e file';
@@ -130,10 +133,15 @@ class _PromptSheetState extends State<_PromptSheet> {
   void initState() {
     super.initState();
     final r = widget.req;
+    // Same name no matter how the link arrived (browser, paste, share):
+    // the file name in the link wins over the browser's own guess
+    // (e.g. "main.mkv"); the server's real name replaces both once checked.
+    final fromUrl = _guessName(r.url);
+    final given = r.fileName ?? '';
     _nameCtrl = TextEditingController(
-        text: (r.fileName != null && r.fileName!.isNotEmpty)
-            ? r.fileName
-            : _guessName(r.url));
+        text: _looksLikeFileName(fromUrl)
+            ? fromUrl
+            : (given.isNotEmpty ? given : fromUrl));
     _probe = _load();
     _initDir();
   }
@@ -153,11 +161,10 @@ class _PromptSheetState extends State<_PromptSheet> {
     final headers = await _headers();
     final info =
         await DownloadManager.instance.inspect(widget.req.url, headers: headers);
-    // use the name the server suggests, unless the person already typed one
-    final r = widget.req;
-    final hasGiven = r.fileName != null && r.fileName!.isNotEmpty;
-    if (!_nameEdited && !hasGiven && info.fileName != null && mounted) {
-      _nameCtrl.text = info.fileName!;
+    // the server's real file name wins, unless the person already typed one
+    final real = info.fileName;
+    if (!_nameEdited && real != null && real.isNotEmpty && mounted) {
+      _nameCtrl.text = real;
     }
     return info;
   }

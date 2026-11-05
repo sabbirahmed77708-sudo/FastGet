@@ -372,7 +372,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
                       itemBuilder: (_, i) => _tile(items[i]),
                     ),
             ),
@@ -396,8 +396,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final on = dm.anyRunning;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      padding: const EdgeInsets.all(18),
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      padding: const EdgeInsets.fromLTRB(18, 12, 18, 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         gradient: LinearGradient(
@@ -422,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text('${formatBytes(speed)}/s',
                         style: TextStyle(
                             color: cs.onPrimary,
-                            fontSize: 28,
+                            fontSize: 27,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.5)),
                   ],
@@ -434,9 +434,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           if (showSwitch) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Divider(height: 1, color: cs.onPrimary.withValues(alpha: 0.25)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Row(
               children: [
                 Icon(on ? Icons.downloading_rounded : Icons.pause_circle_outline,
@@ -449,15 +449,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           fontWeight: FontWeight.w600,
                           fontSize: 14)),
                 ),
-                Switch(
-                  value: on,
-                  onChanged: dm.setDownloadsOn,
-                  activeThumbColor: cs.primary,
-                  activeTrackColor: cs.onPrimary,
-                  inactiveThumbColor: cs.onPrimary,
-                  inactiveTrackColor: cs.onPrimary.withValues(alpha: 0.3),
-                  trackOutlineColor:
-                      WidgetStateProperty.all(Colors.transparent),
+                SizedBox(
+                  height: 34,
+                  child: FittedBox(
+                    child: Switch(
+                      value: on,
+                      onChanged: dm.setDownloadsOn,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      activeThumbColor: cs.primary,
+                      activeTrackColor: cs.onPrimary,
+                      inactiveThumbColor: cs.onPrimary,
+                      inactiveTrackColor: cs.onPrimary.withValues(alpha: 0.3),
+                      trackOutlineColor:
+                          WidgetStateProperty.all(Colors.transparent),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -543,9 +549,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final running = d.status == DlStatus.downloading;
     final failed = d.status == DlStatus.failed;
 
+    // left side under the bar: "15.3 MB of 6.0 GB"
     final sizeText = d.total > 0
         ? trOf(formatBytes(d.downloaded), formatBytes(d.total))
         : formatBytes(d.downloaded);
+    // right side under the bar: "42%"
+    final percent =
+        d.total > 0 ? '${(d.progress * 100).toStringAsFixed(0)}%' : '…';
 
     String status;
     Color statusColor = cs.onSurfaceVariant;
@@ -557,68 +567,77 @@ class _HomeScreenState extends State<HomeScreen> {
       status = tr(d.error ?? 'Failed');
       statusColor = cs.error;
     } else if (d.status == DlStatus.paused) {
-      status = dm.isWaitingForWifi(d)
-          ? '${tr('Waiting for Wi-Fi')} · $sizeText'
-          : '${tr('Paused')} · $sizeText';
+      status = dm.isWaitingForWifi(d) ? tr('Waiting for Wi-Fi') : tr('Paused');
     } else {
-      status = '$sizeText · ${formatBytes(d.speed)}/s · ${formatEta(d)}';
+      status = '${formatBytes(d.speed)}/s · ${formatEta(d)}';
     }
 
+    final nameStyle = const TextStyle(
+        fontWeight: FontWeight.w700, fontSize: 16.5, height: 1.25);
+
     return Card(
+      margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: done ? () => OpenFilex.open(d.savePath) : null,
         onLongPress: () => _confirmRemove(d),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
+          padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: kind.color.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(13),
                     ),
-                    child: Icon(kind.icon, color: kind.color),
+                    child: Icon(kind.icon, color: kind.color, size: 24),
                   ),
                   const SizedBox(width: 12),
+                  // the full file name, up to three lines
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(d.fileName,
-                            maxLines: 2,
+                    child: done
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(d.fileName,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: nameStyle),
+                              const SizedBox(height: 2),
+                              Text(status,
+                                  style: TextStyle(
+                                      fontSize: 13, color: statusColor)),
+                            ],
+                          )
+                        : Text(d.fileName,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 15)),
-                        const SizedBox(height: 3),
-                        Text(status,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                TextStyle(fontSize: 12.5, color: statusColor)),
-                      ],
-                    ),
+                            style: nameStyle),
                   ),
                   if (done)
                     IconButton(
                       tooltip: tr('Open'),
+                      visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.open_in_new_rounded),
                       onPressed: () => OpenFilex.open(d.savePath),
                     )
                   else if (running)
                     IconButton.filledTonal(
                       tooltip: tr('Pause'),
+                      visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.pause_rounded),
                       onPressed: () => dm.pause(d),
                     )
                   else
                     IconButton.filledTonal(
                       tooltip: failed ? tr('Retry') : tr('Resume'),
+                      visualDensity: VisualDensity.compact,
                       icon: Icon(failed
                           ? Icons.refresh_rounded
                           : Icons.play_arrow_rounded),
@@ -626,42 +645,65 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   IconButton(
                     tooltip: tr('More'),
+                    visualDensity: VisualDensity.compact,
                     icon: const Icon(Icons.more_vert_rounded),
                     onPressed: () => _confirmRemove(d),
                   ),
                 ],
               ),
               if (!done) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
+                // thin progress line
                 Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: 10),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
+                      minHeight: 5,
                       value: d.total > 0 ? d.progress : (running ? null : 0),
                       color: failed ? cs.error : kind.color,
                       backgroundColor: kind.color.withValues(alpha: 0.15),
                     ),
                   ),
                 ),
-                if (d.total > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6, right: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('${(d.progress * 100).toStringAsFixed(0)}%',
-                            style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurfaceVariant)),
-                        if (!d.rangeSupported)
-                          T('Single stream · no resume',
-                              style: TextStyle(
-                                  fontSize: 11, color: cs.outline)),
-                      ],
-                    ),
+                const SizedBox(height: 7),
+                // MB on the left, percent on the right
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(sizeText,
+                          style: const TextStyle(
+                              fontSize: 13.5, fontWeight: FontWeight.w600)),
+                      Text(percent,
+                          style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: failed ? cs.error : kind.color)),
+                    ],
                   ),
+                ),
+                const SizedBox(height: 2),
+                // status / speed + ETA on the left, note on the right
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                TextStyle(fontSize: 12.5, color: statusColor)),
+                      ),
+                      if (!d.rangeSupported && d.total > 0)
+                        T('Single stream · no resume',
+                            style:
+                                TextStyle(fontSize: 11, color: cs.outline)),
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
