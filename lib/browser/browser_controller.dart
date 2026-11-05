@@ -435,11 +435,9 @@ class BrowserController extends ChangeNotifier {
   Future<void> clearBrowsingData(
       {bool history = true, bool cache = true, bool cookies = true}) async {
     if (cache) {
-      for (final t in tabs) {
-        try {
-          await t.controller?.clearAllCache();
-        } catch (_) {}
-      }
+      try {
+        await InAppWebViewController.clearAllCache();
+      } catch (_) {}
     }
     if (cookies) {
       try {

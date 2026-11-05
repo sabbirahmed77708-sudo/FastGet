@@ -27,6 +27,8 @@ jobs:
           cp -r lib /tmp/fastget_lib
           flutter create --platforms=android --org com.fastget --project-name fastget .
           rm -rf lib && cp -r /tmp/fastget_lib lib
+          # remove generated sample test and lint config (they reference the template app)
+          rm -rf test analysis_options.yaml
 
       - name: Patch AndroidManifest (permissions)
         run: python3 tool/patch_manifest.py
