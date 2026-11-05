@@ -96,7 +96,7 @@ class _AboutScreenState extends State<AboutScreen> {
                 child: ListTile(
                   leading: Icon(Icons.person_rounded, color: cs.primary),
                   title: const T('Developer'),
-                  subtitle: const Text('SS Diva',
+                  subtitle: const Text('SH',
                       style:
                           TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                 ),
