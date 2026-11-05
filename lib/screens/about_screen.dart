@@ -89,18 +89,18 @@ class _AboutScreenState extends State<AboutScreen> {
                     textAlign: TextAlign.center,
                     style: TextStyle(color: cs.onSurfaceVariant, height: 1.4)),
               ),
-              const SizedBox(height: 28),
-              _updateCard(cs),
-              const SizedBox(height: 12),
-              Card(
-                child: ListTile(
-                  leading: Icon(Icons.person_rounded, color: cs.primary),
-                  title: const T('Developer'),
-                  subtitle: const Text('SH',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                ),
+              const SizedBox(height: 6),
+              // small developer credit right under the tagline
+              Center(
+                child: Text('${tr('Developer')}: SH',
+                    style: TextStyle(
+                        color: cs.outline,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3)),
               ),
+              const SizedBox(height: 26),
+              _updateCard(cs),
             ],
           );
         },
