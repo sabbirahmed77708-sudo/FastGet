@@ -1,0 +1,109 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'browser/download_prompt.dart';
+import 'download_manager.dart';
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Handles links that arrive from outside the app: Android "Share" and
+/// links copied to the clipboard. Both end in the normal DROX download prompt,
+/// which checks that the link is a real file before anything is downloaded.
+class LinkIntake with WidgetsBindingObserver {
+  LinkIntake._();
+  static final LinkIntake instance = LinkIntake._();
+
+  static const _channel = MethodChannel('drox/share');
+  static const _fileExt = {
+    'mp4', 'mkv', 'webm', 'avi', 'mov', '3gp', 'mp3', 'm4a', 'aac', 'wav',
+    'flac', 'ogg', 'zip', 'rar', '7z', 'tar', 'gz', 'apk', 'pdf', 'iso',
+    'exe', 'msi', 'torrent', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'doc',
+    'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'epub',
+  };
+
+  String? _lastClipboard;
+  bool _busy = false;
+
+  void start() {
+    WidgetsBinding.instance.addObserver(this);
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'onShared' && call.arguments is String) {
+        await handleText(call.arguments as String);
+      }
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        final initial = await _channel.invokeMethod<String>('getInitialText');
+        if (initial != null && initial.isNotEmpty) {
+          await handleText(initial);
+        } else {
+          await _checkClipboard();
+        }
+      } on MissingPluginException {
+        // not running on Android
+      } catch (_) {}
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // let the shared-text callback (if any) win first
+      Future.delayed(const Duration(milliseconds: 600), _checkClipboard);
+    }
+  }
+
+  static String? extractUrl(String text) {
+    final m = RegExp(r'https?://[^\s<>"]+').firstMatch(text);
+    return m?.group(0);
+  }
+
+  static bool looksLikeFile(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.pathSegments.isEmpty) return false;
+    final last = uri.pathSegments.last;
+    if (!last.contains('.')) return false;
+    return _fileExt.contains(last.split('.').last.toLowerCase());
+  }
+
+  /// A link shared into the app: always offered, the prompt validates it.
+  Future<void> handleText(String text) async {
+    final url = extractUrl(text);
+    if (url == null) return;
+    await _offer(url);
+  }
+
+  /// A copied link: only offered when it clearly points at a file.
+  Future<void> _checkClipboard() async {
+    try {
+      final data = await Clipboard.getData('text/plain');
+      final text = data?.text?.trim();
+      if (text == null || text.isEmpty || text == _lastClipboard) return;
+      final url = extractUrl(text);
+      if (url == null || !looksLikeFile(url) || isUnsupportedHost(url)) return;
+      _lastClipboard = text;
+      await _offer(url);
+    } catch (_) {}
+  }
+
+  Future<void> _offer(String url) async {
+    if (_busy) return;
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx == null) return;
+    if (isUnsupportedHost(url)) {
+      ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(unsupportedMessage),
+      ));
+      return;
+    }
+    _busy = true;
+    try {
+      await showDownloadPrompt(ctx, DownloadRequest(url: url));
+    } finally {
+      _busy = false;
+    }
+  }
+}

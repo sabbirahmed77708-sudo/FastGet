@@ -16,6 +16,21 @@ const String _ua =
     'Chrome/120.0 Mobile Safari/537.36';
 
 /// Result of inspecting a URL before downloading it.
+/// Hosts DROX does not download from (YouTube's terms forbid it).
+const unsupportedMessage =
+    'YouTube links are not supported. Use YouTube Premium for offline videos.';
+
+bool isUnsupportedHost(String url) {
+  final host = (Uri.tryParse(url)?.host ?? '').toLowerCase();
+  const blocked = [
+    'youtube.com',
+    'youtu.be',
+    'youtube-nocookie.com',
+    'googlevideo.com',
+  ];
+  return blocked.any((b) => host == b || host.endsWith('.$b'));
+}
+
 class ProbeResult {
   final int total;
   final bool range;
@@ -411,6 +426,7 @@ class DownloadManager extends ChangeNotifier {
   /// file name and content type.
   Future<ProbeResult> inspect(String url,
       {Map<String, String>? headers}) async {
+    if (isUnsupportedHost(url)) throw unsupportedMessage;
     final token = CancelToken();
     try {
       final resp = await _dio.get<ResponseBody>(

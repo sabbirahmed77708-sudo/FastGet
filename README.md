@@ -30,3 +30,8 @@ python3 tool/patch_manifest.py
 flutter pub get
 flutter build apk --release
 ```
+
+## Share and copy links
+- From any app, use **Share → DROX** on a file link and DROX shows the download prompt.
+- Copy a direct file link, then open DROX: it offers to download it.
+- Every link is checked first; web pages are refused, and YouTube links are not supported.
