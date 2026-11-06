@@ -107,6 +107,10 @@ class DownloadManager extends ChangeNotifier {
   /// Resume by itself when the internet is back / after a network error.
   bool autoRetry = true;
 
+  /// Put every file into a folder for its type (Video, Music, ...) inside the
+  /// download folder, unless the person picked a folder by hand.
+  bool sortByType = true;
+
   final Set<String> _waitingForNet = {};
   final Map<String, int> _retryAt = {};
   final Map<String, int> _failStreak = {};
@@ -130,7 +134,30 @@ class DownloadManager extends ChangeNotifier {
     await p.setInt('speed_limit', speedLimit);
     await p.setInt('browser_limit', browserLimit);
     await p.setBool('auto_retry', autoRetry);
+    await p.setBool('sort_by_type', sortByType);
   }
+
+  Future<void> setSortByType(bool v) async {
+    sortByType = v;
+    await _saveSettings();
+    notifyListeners();
+  }
+
+  /// Folder name for a file, by its extension.
+  static String typeFolder(String fileName) {
+    final e = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    if (const ['mp4', 'mkv', 'webm', 'avi', 'mov', '3gp', 'ts', 'flv', 'wmv', 'm4v'].contains(e)) return 'Video';
+    if (const ['mp3', 'm4a', 'aac', 'wav', 'flac', 'ogg', 'opus', 'wma'].contains(e)) return 'Music';
+    if (const ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'heic'].contains(e)) return 'Images';
+    if (e == 'apk' || e == 'xapk' || e == 'apks') return 'Apps';
+    if (const ['zip', 'rar', '7z', 'tar', 'gz', 'iso', 'bz2', 'xz'].contains(e)) return 'Archives';
+    if (const ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'epub', 'csv'].contains(e)) return 'Documents';
+    return 'Other';
+  }
+
+  /// [base]/Video, [base]/Music ... when sorting is on, otherwise [base].
+  String sortedDir(String base, String fileName) =>
+      sortByType ? '$base/${typeFolder(fileName)}' : base;
 
   Future<void> setMaxActive(int v) async {
     maxActive = v.clamp(1, 10);
@@ -299,6 +326,7 @@ class DownloadManager extends ChangeNotifier {
     speedLimit = _prefs!.getInt('speed_limit') ?? 0;
     browserLimit = _prefs!.getInt('browser_limit') ?? 0;
     autoRetry = _prefs!.getBool('auto_retry') ?? true;
+    sortByType = _prefs!.getBool('sort_by_type') ?? true;
     _wifiTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
       _wifiTick();
       _netTick();
@@ -374,16 +402,14 @@ class DownloadManager extends ChangeNotifier {
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
       throw 'Enter a valid http/https link';
     }
-    final String dir;
-    if (dirPath != null && dirPath.isNotEmpty) {
+    final given = (dirPath != null && dirPath.isNotEmpty) ? dirPath : null;
+    final hasDir = given != null;
+    if (given != null) {
       try {
-        await Directory(dirPath).create(recursive: true);
+        await Directory(given).create(recursive: true);
       } catch (_) {
         throw 'Cannot save to this folder. Please choose another one.';
       }
-      dir = dirPath;
-    } else {
-      dir = await preferredDir();
     }
     final hdrs = headers ?? const <String, String>{};
     final probe = await inspect(url, headers: hdrs);
@@ -395,6 +421,15 @@ class DownloadManager extends ChangeNotifier {
     if (probe.hls) {
       baseName = baseName.replaceAll(RegExp(r'\.m3u8$', caseSensitive: false), '');
       if (!baseName.contains('.')) baseName = '$baseName.ts';
+    }
+    // no folder given: the type folder inside the download folder
+    var dir = given ?? sortedDir(await preferredDir(), baseName);
+    if (!hasDir) {
+      try {
+        await Directory(dir).create(recursive: true);
+      } catch (_) {
+        dir = await preferredDir();
+      }
     }
     final name = _uniqueName(dir, baseName);
     if (probe.contentType != null &&

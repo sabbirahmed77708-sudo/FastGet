@@ -102,7 +102,20 @@ class _PromptSheetState extends State<_PromptSheet> {
   late final TextEditingController _nameCtrl;
   bool _nameEdited = false;
   bool _editing = false;
-  String? _dir;
+  String? _dir; // base folder (the person's choice, or the default)
+  bool _dirManual = false; // folder picked by hand: no automatic type folder
+
+  /// Where the file really goes: the picked folder, or the type folder
+  /// (Video, Music ...) inside the default folder.
+  String? get _effectiveDir {
+    final d = _dir;
+    if (d == null) return null;
+    if (_dirManual) return d;
+    return DownloadManager.instance.sortedDir(d, _nameCtrl.text);
+  }
+
+  bool get _autoSorted =>
+      !_dirManual && DownloadManager.instance.sortByType && _dir != null;
   bool _busy = false;
   bool _copied = false;
   String? _error;
@@ -171,7 +184,12 @@ class _PromptSheetState extends State<_PromptSheet> {
 
   Future<void> _chooseFolder() async {
     final p = await pickFolder(context, start: _dir);
-    if (p != null && mounted) setState(() => _dir = p);
+    if (p != null && mounted) {
+      setState(() {
+        _dir = p;
+        _dirManual = true;
+      });
+    }
   }
 
   Future<void> _copyLink() async {
@@ -199,9 +217,10 @@ class _PromptSheetState extends State<_PromptSheet> {
         widget.req.url,
         headers: headers,
         suggestedName: name,
-        dirPath: _dir,
+        dirPath: _effectiveDir,
       );
-      if (_dir != null) await dm.setPreferredDir(_dir!);
+      // only a folder picked by hand becomes the new default
+      if (_dir != null && _dirManual) await dm.setPreferredDir(_dir!);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -490,7 +509,7 @@ class _PromptSheetState extends State<_PromptSheet> {
   }
 
   Widget _saveSection(ColorScheme cs) {
-    final dir = _dir;
+    final dir = _effectiveDir;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -517,12 +536,32 @@ class _PromptSheetState extends State<_PromptSheet> {
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(folderName(dir),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 14.5)),
+                            Row(children: [
+                              Flexible(
+                                child: Text(folderName(dir),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14.5)),
+                              ),
+                              if (_autoSorted) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: cs.primary.withValues(alpha: 0.14),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(tr('Auto by file type'),
+                                      style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: cs.primary)),
+                                ),
+                              ],
+                            ]),
                             Text(prettyPath(dir),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -550,10 +589,14 @@ class _PromptSheetState extends State<_PromptSheet> {
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(
                     label: Text(tr(q.$1)),
-                    selected: _dir == q.$2,
+                    selected: _dirManual && _dir == q.$2,
                     showCheckmark: false,
-                    onSelected:
-                        _busy ? null : (_) => setState(() => _dir = q.$2),
+                    onSelected: _busy
+                        ? null
+                        : (_) => setState(() {
+                              _dir = q.$2;
+                              _dirManual = true;
+                            }),
                   ),
                 ),
               ActionChip(

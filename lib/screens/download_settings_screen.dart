@@ -115,6 +115,15 @@ class DownloadSettingsScreen extends StatelessWidget {
               value: dm.autoRetry,
               onChanged: dm.setAutoRetry,
             ),
+            _head(context, 'Folders'),
+            SwitchListTile(
+              secondary: const Icon(Icons.folder_copy_outlined),
+              title: const T('Sort files into folders by type'),
+              subtitle: const T(
+                  'Video, Music, Images, Apps, Archives and Documents each go to their own folder inside the download folder. A folder you pick by hand is always used as it is.'),
+              value: dm.sortByType,
+              onChanged: dm.setSortByType,
+            ),
             _head(context, 'Queue'),
             ListTile(
               leading: const Icon(Icons.format_list_numbered_rounded),
