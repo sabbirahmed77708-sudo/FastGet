@@ -39,7 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
     dm.addListener(_rebuild);
     UpdateChecker.instance.addListener(_rebuild);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && !widget.embedded) maybePromptUpdate(context);
+      if (mounted && !widget.embedded) {
+        maybeShowWhatsNew(context);
+        maybePromptUpdate(context);
+      }
     });
   }
 

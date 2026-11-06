@@ -240,6 +240,9 @@ class DownloadManager extends ChangeNotifier {
     }
   }
 
+  /// True on Wi-Fi / Ethernet (also true when it cannot be told).
+  Future<bool> onWifi() => _onWifi();
+
   Future<bool> _onWifi() async {
     try {
       return await _net.invokeMethod<bool>('isWifi') ?? true;

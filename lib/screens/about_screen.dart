@@ -142,7 +142,7 @@ class _AboutScreenState extends State<AboutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             body,
-            if (!up.checking) ...[
+            if (!up.checking && up.phase != UpdatePhase.downloading) ...[
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () => up.check(),
@@ -150,6 +150,19 @@ class _AboutScreenState extends State<AboutScreen> {
                 label: const T('Check for update'),
               ),
             ],
+            const SizedBox(height: 4),
+            const Divider(height: 20),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: up.autoUpdate,
+              onChanged: up.setAutoUpdate,
+              title: const T('Auto-update',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const T(
+                  'Download new versions by itself on Wi-Fi. You only tap Install.',
+                  style: TextStyle(fontSize: 12)),
+            ),
           ],
         ),
       ),

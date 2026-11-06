@@ -6,6 +6,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'download_manager.dart';
 
 /// GitHub repository that publishes DROM builds as Releases.
 const String kRepo = 'sabbirahmed77708-sudo/FastGet';
@@ -51,36 +54,116 @@ class UpdateChecker extends ChangeNotifier {
   int totalBytes = 0;
   String? updateError;
   String? _apkPath;
+  int _readyBuild = 0; // build of the APK that is downloaded and waiting
   CancelToken? _token;
 
   /// Build number the "update available" pop-up was already shown for.
   int promptedBuild = 0;
 
+  // ---- automatic update (like the Play Store / Messenger)
+  /// When ON, a new version is downloaded by itself in the background
+  /// (on Wi-Fi only) and only the final "Install" tap is left.
+  bool autoUpdate = true;
+  bool _settingsLoaded = false;
+
+  /// Download speed (bytes/s, smoothed) and time left for the progress line.
+  double speed = 0;
+  int get etaSeconds => (speed > 0 && totalBytes > received)
+      ? ((totalBytes - received) / speed).round()
+      : -1;
+
+  /// True when the new version was downloaded by itself and is waiting for
+  /// the person to tap "Install".
+  bool autoDownloaded = false;
+
+  Future<void> loadSettings() async {
+    if (_settingsLoaded) return;
+    try {
+      final p = await SharedPreferences.getInstance();
+      autoUpdate = p.getBool('auto_update') ?? true;
+      _settingsLoaded = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> setAutoUpdate(bool v) async {
+    autoUpdate = v;
+    notifyListeners();
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setBool('auto_update', v);
+    } catch (_) {}
+    if (v) _maybeAutoDownload();
+  }
+
+  /// Starts the background download by itself when allowed.
+  Future<void> _maybeAutoDownload() async {
+    final info = available;
+    if (!autoUpdate || info == null) return;
+    if (phase != UpdatePhase.idle || _autoStarting) return;
+    _autoStarting = true;
+    try {
+      // mobile data is not used for a big update without asking
+      if (!await DownloadManager.instance.onWifi()) return;
+      await startUpdate(auto: true);
+    } finally {
+      _autoStarting = false;
+      // lets the screen ask the person instead (e.g. not on Wi-Fi)
+      if (phase == UpdatePhase.idle) notifyListeners();
+    }
+  }
+
+  bool _autoStarting = false;
+
+  /// An update download is running, or is about to start by itself.
+  bool get busy => phase != UpdatePhase.idle || _autoStarting;
+
   double get progress =>
       totalBytes > 0 ? (received / totalBytes).clamp(0.0, 1.0).toDouble() : 0;
 
   /// Downloads the new APK inside DROM and opens the installer when done.
-  Future<void> startUpdate() async {
+  ///
+  /// With [auto] the installer is not opened by itself: the person is asked
+  /// first (see [maybePromptUpdate]).
+  Future<void> startUpdate({bool auto = false}) async {
     final info = available;
     if (info == null || phase == UpdatePhase.downloading) return;
     phase = UpdatePhase.downloading;
     received = 0;
+    speed = 0;
     totalBytes = info.size;
     updateError = null;
+    autoDownloaded = auto;
     notifyListeners();
     final token = _token = CancelToken();
     try {
       final dir = await getTemporaryDirectory();
-      // old update files are not needed any more
+      final path = '${dir.path}/DROM-update-${info.build}.apk';
+      final tmp = '$path.part';
+
+      // already downloaded earlier (app was closed before installing)?
+      final done = File(path);
+      if (await done.exists() &&
+          (info.size <= 0 || await done.length() == info.size)) {
+        _apkPath = path;
+        received = totalBytes = await done.length();
+        await _rememberPending(info);
+        _readyBuild = info.build;
+        phase = UpdatePhase.ready;
+        notifyListeners();
+        if (!auto) await install();
+        return;
+      }
+      // old / other update files are not needed any more
       for (final f in dir.listSync()) {
-        if (f is File && f.path.contains('DROM-update-')) {
+        if (f is File &&
+            f.path.contains('DROM-update-') &&
+            f.path != path) {
           try {
             f.deleteSync();
           } catch (_) {}
         }
       }
-      final path = '${dir.path}/DROM-update-${info.build}.apk';
-      final tmp = '$path.part';
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 20),
         receiveTimeout: const Duration(seconds: 60),
@@ -89,6 +172,7 @@ class UpdateChecker extends ChangeNotifier {
         headers: {'User-Agent': 'DROM-app'},
       ));
       var tick = DateTime.now();
+      var lastBytes = 0;
       await dio.download(
         info.apkUrl,
         tmp,
@@ -97,7 +181,11 @@ class UpdateChecker extends ChangeNotifier {
           received = r;
           if (t > 0) totalBytes = t;
           final now = DateTime.now();
-          if (now.difference(tick).inMilliseconds > 150) {
+          final ms = now.difference(tick).inMilliseconds;
+          if (ms > 250) {
+            final inst = (r - lastBytes) * 1000 / ms;
+            speed = speed == 0 ? inst : speed * 0.7 + inst * 0.3;
+            lastBytes = r;
             tick = now;
             notifyListeners();
           }
@@ -110,9 +198,12 @@ class UpdateChecker extends ChangeNotifier {
       }
       await f.rename(path);
       _apkPath = path;
+      speed = 0;
+      await _rememberPending(info);
+      _readyBuild = info.build;
       phase = UpdatePhase.ready;
       notifyListeners();
-      await install();
+      if (!auto) await install();
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
         phase = UpdatePhase.idle;
@@ -159,6 +250,48 @@ class UpdateChecker extends ChangeNotifier {
     }
   }
 
+  // ---- "What's new" after the update is installed
+  /// Saves the release notes of the version being installed, so they can be
+  /// shown once the app starts again on the new version.
+  Future<void> _rememberPending(UpdateInfo info) async {
+    try {
+      final p = await SharedPreferences.getInstance();
+      await p.setInt('pending_build', info.build);
+      await p.setString('pending_name', info.name);
+      await p.setString('pending_notes', info.notes);
+    } catch (_) {}
+  }
+
+  /// Returns the notes of the update that was just installed (once), or null.
+  /// Also removes the downloaded APK, which is not needed any more.
+  Future<UpdateInfo?> takeWhatsNew() async {
+    try {
+      await loadVersion();
+      final p = await SharedPreferences.getInstance();
+      final pending = p.getInt('pending_build') ?? 0;
+      if (pending <= 0 || build < pending) return null; // not installed yet
+      final info = UpdateInfo(
+        build: pending,
+        name: p.getString('pending_name') ?? '',
+        notes: p.getString('pending_notes') ?? '',
+        apkUrl: '',
+        size: 0,
+      );
+      await p.remove('pending_build');
+      await p.remove('pending_name');
+      await p.remove('pending_notes');
+      try {
+        final dir = await getTemporaryDirectory();
+        for (final f in dir.listSync()) {
+          if (f is File && f.path.contains('DROM-update-')) f.deleteSync();
+        }
+      } catch (_) {}
+      return info;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> loadVersion() async {
     if (version.isNotEmpty) return;
     try {
@@ -176,6 +309,7 @@ class UpdateChecker extends ChangeNotifier {
     notifyListeners();
     try {
       await loadVersion();
+      await loadSettings();
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 15),
@@ -222,6 +356,14 @@ class UpdateChecker extends ChangeNotifier {
       } else {
         available = null;
       }
+      // a newer build than the downloaded one came out: start over for it
+      if (phase == UpdatePhase.ready &&
+          available != null &&
+          available!.build != _readyBuild) {
+        phase = UpdatePhase.idle;
+        _apkPath = null;
+        autoDownloaded = false;
+      }
       checkedOnce = true;
       error = null;
     } on DioException {
@@ -231,6 +373,8 @@ class UpdateChecker extends ChangeNotifier {
     } finally {
       checking = false;
       notifyListeners();
+      // new version found: fetch it quietly in the background
+      if (available != null) _maybeAutoDownload();
     }
   }
 }
