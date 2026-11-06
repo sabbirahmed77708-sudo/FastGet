@@ -37,6 +37,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   void initState() {
     super.initState();
+    browser.screenOpen = true;
     _urlFocus.addListener(() {
       if (!_urlFocus.hasFocus && _editing && mounted) {
         setState(() => _editing = false);
@@ -46,6 +47,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   @override
   void dispose() {
+    browser.screenOpen = false;
     browser.detachAll(); // WebViews die with this screen
     _urlCtrl.dispose();
     _urlFocus.dispose();

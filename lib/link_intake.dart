@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 
+import 'browser/browser_controller.dart';
+import 'browser/browser_screen.dart';
 import 'browser/download_prompt.dart';
 import 'download_manager.dart';
 import 'models.dart';
@@ -73,7 +75,10 @@ class LinkIntake with WidgetsBindingObserver {
 
   static String? extractUrl(String text) {
     final m = RegExp(r'https?://[^\s<>"]+').firstMatch(text);
-    return m?.group(0);
+    if (m != null) return m.group(0);
+    // "www.example.com/page" without the https://
+    final w = RegExp(r'\bwww\.[^\s<>"]+').firstMatch(text);
+    return w == null ? null : 'https://${w.group(0)}';
   }
 
   static bool looksLikeFile(String url) {
@@ -84,11 +89,42 @@ class LinkIntake with WidgetsBindingObserver {
     return _fileExt.contains(last.split('.').last.toLowerCase());
   }
 
-  /// A link shared into the app: always offered, the prompt validates it.
+  /// A link shared into the app ("Share" -> DROM).
+  /// A direct file link goes to the download prompt; any other web page opens
+  /// in the DROM browser (files started from that page are caught there).
   Future<void> handleText(String text) async {
     final url = extractUrl(text);
     if (url == null) return;
-    await _offer(url);
+    if (looksLikeFile(url)) {
+      await _offer(url);
+    } else {
+      _openInBrowser(url);
+    }
+  }
+
+  /// Opens [url] in a new DROM browser tab and brings the browser forward.
+  void _openInBrowser(String url) {
+    final nav = rootNavigatorKey.currentState;
+    final ctx = rootNavigatorKey.currentContext;
+    if (nav == null || ctx == null) return;
+    if (isUnsupportedHost(url)) {
+      ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text(unsupportedMessage),
+      ));
+      return;
+    }
+    final b = BrowserController.instance;
+    b.newTab(url: url);
+    if (b.screenOpen) {
+      // browser is already somewhere in the stack (maybe under Downloads)
+      nav.popUntil((r) => r.isFirst || r.settings.name == kBrowserRoute);
+    } else {
+      nav.push(MaterialPageRoute<void>(
+        settings: const RouteSettings(name: kBrowserRoute),
+        builder: (_) => const BrowserScreen(),
+      ));
+    }
   }
 
   /// A copied link: only offered when it clearly points at a file.

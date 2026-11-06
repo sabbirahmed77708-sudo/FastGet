@@ -220,7 +220,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openBrowser() async {
     await Navigator.push<void>(
       context,
-      MaterialPageRoute(builder: (_) => const BrowserScreen()),
+      MaterialPageRoute(
+        settings: const RouteSettings(name: kBrowserRoute),
+        builder: (_) => const BrowserScreen(),
+      ),
     );
   }
 

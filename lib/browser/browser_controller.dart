@@ -9,6 +9,9 @@ import '../download_manager.dart';
 import '../hls.dart';
 import 'browser_tab.dart';
 
+/// Route name of the browser screen (used to come back to it).
+const String kBrowserRoute = 'drom_browser';
+
 class Shortcut {
   final String name;
   final String url;
@@ -187,6 +190,9 @@ class BrowserController extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- tabs
+
+  /// True while the browser screen is on the navigation stack.
+  bool screenOpen = false;
 
   BrowserTab newTab({String? url, int? windowId, bool activate = true}) {
     final t = BrowserTab(
