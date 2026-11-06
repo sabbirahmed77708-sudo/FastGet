@@ -67,24 +67,22 @@ Future<bool> showDownloadPrompt(
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    transitionDuration: const Duration(milliseconds: 460),
+    transitionDuration: const Duration(milliseconds: 380),
+    reverseTransitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (_, __, ___) => _PromptSheet(req: req),
+    // one calm motion: slide up + fade, no overshoot, drawn as a cached layer
     transitionBuilder: (context, anim, _, child) {
-      final pop = CurvedAnimation(
+      final c = CurvedAnimation(
           parent: anim,
-          curve: Curves.easeOutBack,
+          curve: Curves.easeOutCubic,
           reverseCurve: Curves.easeInCubic);
-      final fade = CurvedAnimation(parent: anim, curve: Curves.easeOut);
       return FadeTransition(
-        opacity: fade,
+        opacity: c,
         child: SlideTransition(
-          position: Tween<Offset>(
-                  begin: const Offset(0, 0.10), end: Offset.zero)
-              .animate(pop),
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.82, end: 1.0).animate(pop),
-            child: child,
-          ),
+          position:
+              Tween<Offset>(begin: const Offset(0, 0.14), end: Offset.zero)
+                  .animate(c),
+          child: RepaintBoundary(child: child),
         ),
       );
     },
@@ -142,8 +140,11 @@ class _PromptSheetState extends State<_PromptSheet> {
         text: _looksLikeFileName(fromUrl)
             ? fromUrl
             : (given.isNotEmpty ? given : fromUrl));
-    _probe = _load();
-    _initDir();
+    // network + folder lookup start after the popup has settled, so nothing
+    // rebuilds while it is moving
+    final settled = Future.delayed(const Duration(milliseconds: 400));
+    _probe = settled.then((_) => _load());
+    settled.then((_) => _initDir());
   }
 
   @override
@@ -624,35 +625,7 @@ class _Appear extends StatefulWidget {
   State<_Appear> createState() => _AppearState();
 }
 
-class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 380));
-  late final Animation<double> _a =
-      CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-
+class _AppearState extends State<_Appear> {
   @override
-  void initState() {
-    super.initState();
-    Future.delayed(Duration(milliseconds: 140 + widget.index * 70), () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _a,
-      child: SlideTransition(
-        position: Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
-            .animate(_a),
-        child: widget.child,
-      ),
-    );
-  }
+  Widget build(BuildContext context) => widget.child;
 }
