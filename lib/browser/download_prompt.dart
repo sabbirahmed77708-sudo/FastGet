@@ -454,7 +454,13 @@ class _PromptSheetState extends State<_PromptSheet> {
           ]),
         );
 
-    return Container(
+    // A long random name taken from the link is not shown: a calm placeholder
+    // holds the space until the real name is known, then it fades in, so the
+    // popup never opens with a huge block of text that jumps afterwards.
+    final known = !loading || (_looksLikeFileName(name) && name.length <= 80);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: kind.color.withValues(alpha: 0.07),
@@ -475,7 +481,33 @@ class _PromptSheetState extends State<_PromptSheet> {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              layoutBuilder: (cur, prev) => Stack(
+                alignment: Alignment.topLeft,
+                children: [...prev, if (cur != null) cur],
+              ),
+              child: !known
+                  ? Column(
+                      key: const ValueKey('skeleton'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 4),
+                        _Skel(width: double.infinity, height: 15),
+                        const SizedBox(height: 8),
+                        const _Skel(width: 150, height: 15),
+                        const SizedBox(height: 14),
+                        const Row(children: [
+                          _Skel(width: 70, height: 24, radius: 12),
+                          SizedBox(width: 6),
+                          _Skel(width: 70, height: 24, radius: 12),
+                        ]),
+                      ],
+                    )
+                  : Column(
+              key: const ValueKey('name'),
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_editing)
@@ -512,6 +544,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                   ],
                 ),
               ],
+            ),
             ),
           ),
           IconButton(
@@ -688,4 +721,41 @@ class _Appear extends StatefulWidget {
 class _AppearState extends State<_Appear> {
   @override
   Widget build(BuildContext context) => widget.child;
+}
+
+/// Soft pulsing placeholder bar.
+class _Skel extends StatefulWidget {
+  final double width, height, radius;
+  const _Skel({required this.width, required this.height, this.radius = 7});
+
+  @override
+  State<_Skel> createState() => _SkelState();
+}
+
+class _SkelState extends State<_Skel> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 900))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Theme.of(context).colorScheme.onSurface;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (_, __) => Container(
+        width: widget.width,
+        height: widget.height,
+        decoration: BoxDecoration(
+          color: base.withValues(alpha: 0.06 + 0.07 * _c.value),
+          borderRadius: BorderRadius.circular(widget.radius),
+        ),
+      ),
+    );
+  }
 }

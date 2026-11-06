@@ -1,56 +1,58 @@
-"""Builds SDM's logo and launcher icons from the supplied artwork
-(assets/icon/logo_source.jpg): ONLY the folder-and-cloud logo, cut out of its
-dark backdrop, so no white or other coloured area is left around it.
+"""Draws SDM's logo and launcher icons (vector design rendered with Chromium).
 
-  assets/icon/logo.png     logo for About (transparent around the logo)
-  assets/icon/icon.png     launcher icon, logo filling the square (older Androids)
-  assets/icon/icon_fg.png  adaptive icon foreground (the logo)
-  assets/icon/icon_bg.png  adaptive icon background (fully transparent)
+  assets/icon/logo.png     logo for About (rounded square)
+  assets/icon/icon.png     launcher icon, full square (older Androids)
+  assets/icon/icon_fg.png  adaptive icon foreground (the glyph, transparent)
+  assets/icon/icon_bg.png  adaptive icon background (the gradient)
 
 Run:  python3 tool/make_icon.py"""
-import numpy as np
-from PIL import Image, ImageFilter
-from scipy import ndimage as ndi
+from playwright.sync_api import sync_playwright
 
-SRC = "assets/icon/logo_source.jpg"
-src = Image.open(SRC).convert("RGB")
-a = np.asarray(src).astype(int)
-h, w, _ = a.shape
+DEFS = """
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#4F46E5"/><stop offset=".55" stop-color="#2563EB"/>
+    <stop offset="1" stop-color="#06B6D4"/>
+  </linearGradient>
+  <radialGradient id="glow" cx=".25" cy=".15" r=".8">
+    <stop offset="0" stop-color="#fff" stop-opacity=".30"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#DCEBFF"/>
+  </linearGradient>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="150%">
+    <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#0B1B6B" flood-opacity=".35"/>
+  </filter>
+</defs>"""
 
-# backdrop colour per row (outer columns), logo = what differs from it
-bgc = np.concatenate([a[:, :10], a[:, -10:]], axis=1).mean(axis=1)
-d = np.abs(a - bgc[:, None, :]).max(axis=2)
-fg = ndi.binary_opening(d >= 16, iterations=2)
-lab, n = ndi.label(fg)
-sizes = ndi.sum(fg, lab, range(1, n + 1))
-fg = lab == (1 + int(np.argmax(sizes)))
-fg = ndi.binary_closing(fg, iterations=4)
-for y in range(int(0.40 * h), h):  # folder body: fill each row edge to edge
-    r = np.where(fg[y])[0]
-    if len(r) > 200:
-        fg[y, r.min():r.max() + 1] = True
-fg = ndi.binary_fill_holes(fg)
-m = Image.fromarray((fg * 255).astype("uint8")).filter(ImageFilter.GaussianBlur(1.0))
-m = m.point(lambda v: 0 if v < 100 else (255 if v > 160 else int((v - 100) * 255 / 60)))
-logo = src.convert("RGBA")
-logo.putalpha(m)
-logo = logo.crop(logo.getbbox())
-logo = logo.crop((0, 0, logo.width, logo.height - 10))  # soft shadow strip at the foot
-logo = logo.crop(logo.getbbox())
-print("logo", logo.size)
+# glyph drawn in a 1024 box, content centred on (512,512)
+GLYPH = """
+<g filter="url(#sh)">
+  <path d="M452 215 H572 V500 H680 L512 690 L344 500 H452 Z" fill="url(#arrow)"
+        stroke="url(#arrow)" stroke-width="34" stroke-linejoin="round"/>
+  <path d="M262 640 V740 Q262 800 322 800 H702 Q762 800 762 740 V640"
+        fill="none" stroke="#fff" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<circle cx="512" cy="738" r="0" fill="#fff"/>"""
 
 
-def on_square(img, size, frac):
-    """The logo, centred on a transparent square, `frac` of the width."""
-    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    tw = int(size * frac)
-    th = int(tw * img.height / img.width)
-    piece = img.resize((tw, th), Image.LANCZOS)
-    out.alpha_composite(piece, ((size - tw) // 2, (size - th) // 2))
-    return out
+def svg(body, size=1024):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+            f'viewBox="0 0 1024 1024">{DEFS}{body}</svg>')
 
 
-logo.resize((768, int(768 * logo.height / logo.width)), Image.LANCZOS).save("assets/icon/logo.png")
-on_square(logo, 1024, 0.96).save("assets/icon/icon.png")
-on_square(logo, 1024, 0.64).save("assets/icon/icon_fg.png")  # fits the adaptive safe zone
-Image.new("RGBA", (1024, 1024), (0, 0, 0, 0)).save("assets/icon/icon_bg.png")
+BG = '<rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#glow)"/>'
+ROUND = '<clipPath id="r"><rect width="1024" height="1024" rx="232"/></clipPath>'
+full = svg(f'{ROUND}<g clip-path="url(#r)">{BG}</g>{GLYPH}')            # About logo
+square = svg(f'{BG}<g transform="translate(512 512) scale(1.0) translate(-512 -512)">{GLYPH}</g>')
+fg = svg(f'<g transform="translate(512 512) scale(.66) translate(-512 -512)">{GLYPH}</g>')
+bg = svg(BG)
+
+with sync_playwright() as p:
+    b = p.chromium.launch()
+    pg = b.new_page(viewport={"width": 1024, "height": 1024})
+    for name, doc in [("logo", full), ("icon", square), ("icon_fg", fg), ("icon_bg", bg)]:
+        pg.set_content(f'<body style="margin:0;background:transparent">{doc}</body>')
+        pg.screenshot(path=f"assets/icon/{name}.png", omit_background=True)
+    b.close()
+print("icons written")
