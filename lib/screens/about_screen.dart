@@ -39,7 +39,7 @@ class _AboutScreenState extends State<AboutScreen> {
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
             children: [
               Center(
-                // the app logo exactly as it is (its own rounded corners)
+                // the app logo only, nothing around it
                 child: Image.asset('assets/icon/logo.png',
                     width: 150, fit: BoxFit.contain, filterQuality: FilterQuality.high),
               ),
