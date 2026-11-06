@@ -135,7 +135,9 @@ class DownloadNotifier {
     final active =
         items.where((e) => e.status == DlStatus.downloading).toList();
     final waiting = items
-        .where((e) => e.status == DlStatus.paused && _dm.isWaitingForWifi(e))
+        .where((e) =>
+            (e.status == DlStatus.paused && _dm.waitReason(e) != null) ||
+            e.status == DlStatus.queued)
         .toList();
     final held = items
         .where((e) =>
@@ -185,8 +187,8 @@ class DownloadNotifier {
 
   Map<String, dynamic> _itemMap(DownloadItem it) {
     final running = it.status == DlStatus.downloading;
-    final waiting = !running && _dm.isWaitingForWifi(it);
-    final state = waiting ? tr('Waiting for Wi-Fi') : tr('Paused');
+    final reason = running ? null : _dm.waitReason(it);
+    final state = tr(reason ?? 'Paused');
     final details = _ns.progressDetails;
     final String status;
     if (running) {

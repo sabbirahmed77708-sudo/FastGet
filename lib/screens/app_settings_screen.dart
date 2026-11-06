@@ -6,6 +6,7 @@ import '../download_manager.dart';
 import '../l10n.dart';
 import '../folder_picker.dart';
 import 'about_screen.dart';
+import 'download_settings_screen.dart';
 import 'notification_settings_screen.dart';
 
 /// App-level settings (downloads, appearance, language).
@@ -67,6 +68,17 @@ class AppSettingsScreen extends StatelessWidget {
                 final p = await pickFolder(context, start: cur);
                 if (p != null) await dm.setPreferredDir(p);
               },
+            ),
+            ListTile(
+              leading: const Icon(Icons.tune_rounded),
+              title: const T('Download speed & queue'),
+              subtitle: const T('Auto resume, queue, speed limit'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const DownloadSettingsScreen()),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.notifications_outlined),

@@ -10,6 +10,7 @@ import 'media_ui.dart';
 import 'sheets.dart';
 import 'tab_view.dart';
 import 'tabs_drawer.dart';
+import '../download_manager.dart';
 import '../l10n.dart';
 
 /// The DROM browser: toolbar, tabs drawer, WebViews, menu and find bar.
@@ -38,6 +39,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   void initState() {
     super.initState();
     browser.screenOpen = true;
+    DownloadManager.instance.setBrowserOpen(true);
     _urlFocus.addListener(() {
       if (!_urlFocus.hasFocus && _editing && mounted) {
         setState(() => _editing = false);
@@ -48,6 +50,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
   @override
   void dispose() {
     browser.screenOpen = false;
+    DownloadManager.instance.setBrowserOpen(false);
     browser.detachAll(); // WebViews die with this screen
     _urlCtrl.dispose();
     _urlFocus.dispose();

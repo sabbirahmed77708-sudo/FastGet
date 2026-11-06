@@ -683,8 +683,8 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (failed) {
       status = tr(d.error ?? 'Failed');
       statusColor = cs.error;
-    } else if (d.status == DlStatus.paused) {
-      status = dm.isWaitingForWifi(d) ? tr('Waiting for Wi-Fi') : tr('Paused');
+    } else if (d.status == DlStatus.paused || d.status == DlStatus.queued) {
+      status = tr(dm.waitReason(d) ?? 'Paused');
     } else {
       status = '${formatBytes(d.speed)}/s · ${formatEta(d)}';
     }

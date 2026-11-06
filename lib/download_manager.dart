@@ -64,6 +64,8 @@ class _Run {
   final CancelToken token = CancelToken();
   Timer? ticker;
   List<int> segBytes = [];
+  int startBytes = 0;
+  int nextFree = 0; // speed limit pacing (microseconds)
 }
 
 class DownloadManager extends ChangeNotifier {
@@ -91,13 +93,216 @@ class DownloadManager extends ChangeNotifier {
 
   bool isWaitingForWifi(DownloadItem d) => _waitingForWifi.contains(d.id);
 
+  // ---- queue, speed limit, automatic retry
+  /// How many downloads run at the same time; the rest wait in the queue.
+  int maxActive = 3;
+
+  /// Speed limit for all downloads together, bytes per second (0 = none).
+  int speedLimit = 0;
+
+  /// Extra limit while the browser screen is open (0 = off).
+  int browserLimit = 0;
+  bool browserOpen = false;
+
+  /// Resume by itself when the internet is back / after a network error.
+  bool autoRetry = true;
+
+  final Set<String> _waitingForNet = {};
+  final Map<String, int> _retryAt = {};
+  final Map<String, int> _failStreak = {};
+  int _offlineTicks = 0;
+
+  bool isWaitingForNet(DownloadItem d) => _waitingForNet.contains(d.id);
+
+  /// Why a not-running download is waiting (null = it is just paused).
+  String? waitReason(DownloadItem d) {
+    if (d.status == DlStatus.queued) return 'Queued';
+    if (d.status != DlStatus.paused) return null;
+    if (_waitingForWifi.contains(d.id)) return 'Waiting for Wi-Fi';
+    if (_waitingForNet.contains(d.id)) return 'Waiting for internet';
+    return null;
+  }
+
+  Future<void> _saveSettings() async {
+    final p = _prefs;
+    if (p == null) return;
+    await p.setInt('max_active', maxActive);
+    await p.setInt('speed_limit', speedLimit);
+    await p.setInt('browser_limit', browserLimit);
+    await p.setBool('auto_retry', autoRetry);
+  }
+
+  Future<void> setMaxActive(int v) async {
+    maxActive = v.clamp(1, 10);
+    notifyListeners();
+    await _saveSettings();
+    _pump();
+  }
+
+  Future<void> setSpeedLimit(int bytesPerSec) async {
+    speedLimit = bytesPerSec < 0 ? 0 : bytesPerSec;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setBrowserLimit(int bytesPerSec) async {
+    browserLimit = bytesPerSec < 0 ? 0 : bytesPerSec;
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  Future<void> setAutoRetry(bool v) async {
+    autoRetry = v;
+    if (!v) {
+      // stop waiting for the internet: they simply stay paused
+      _waitingForNet.clear();
+    }
+    notifyListeners();
+    await _saveSettings();
+  }
+
+  void setBrowserOpen(bool v) {
+    if (browserOpen == v) return;
+    browserOpen = v;
+    notifyListeners();
+  }
+
+  /// The limit that applies right now (bytes/s, 0 = none).
+  int get effectiveLimit {
+    var lim = speedLimit;
+    if (browserOpen && browserLimit > 0) {
+      lim = lim > 0 ? (lim < browserLimit ? lim : browserLimit) : browserLimit;
+    }
+    return lim;
+  }
+
+  /// Slows a download down so that every running download gets the same
+  /// share of the limit. Awaiting here makes the network wait too.
+  Future<void> _pace(_Run run, int bytes) async {
+    final lim = effectiveLimit;
+    if (lim <= 0) return;
+    final share = lim / (_runs.isEmpty ? 1 : _runs.length);
+    final now = DateTime.now().microsecondsSinceEpoch;
+    if (run.nextFree < now) run.nextFree = now;
+    run.nextFree += (bytes / share * 1000000).round();
+    final wait = run.nextFree - now;
+    if (wait > 4000) await Future.delayed(Duration(microseconds: wait));
+  }
+
+  /// Starts waiting downloads while there is room.
+  void _pump() {
+    while (_runs.length < maxActive) {
+      final next = items
+          .where((e) => e.status == DlStatus.queued && !_runs.containsKey(e.id))
+          .firstOrNull;
+      if (next == null) return;
+      _begin(next);
+    }
+  }
+
+  Future<bool> _hasInternet() async {
+    for (final host in const ['1.1.1.1', '8.8.8.8']) {
+      try {
+        final s = await Socket.connect(host, 443,
+            timeout: const Duration(seconds: 3));
+        s.destroy();
+        return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+
+  /// Every few seconds: pause on lost internet, resume when it is back.
+  Future<void> _netTick() async {
+    if (!autoRetry) return;
+    final running = items.any((e) => e.status == DlStatus.downloading);
+    if (!running && _waitingForNet.isEmpty) {
+      _offlineTicks = 0;
+      return;
+    }
+    final online = await _hasInternet();
+    if (!online) {
+      if (running && ++_offlineTicks >= 2) {
+        for (final it
+            in items.where((e) => e.status == DlStatus.downloading).toList()) {
+          pause(it);
+          _waitingForNet.add(it.id);
+          _retryAt[it.id] = 0;
+        }
+        notifyListeners();
+      }
+      return;
+    }
+    _offlineTicks = 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final id in _waitingForNet.toList()) {
+      if ((_retryAt[id] ?? 0) > now) continue;
+      final it = items.where((e) => e.id == id).firstOrNull;
+      _waitingForNet.remove(id);
+      if (it != null && it.status == DlStatus.paused) start(it);
+    }
+  }
+
+  /// Network-type problems are retried by themselves; others are final.
+  bool _isTransient(Object e) {
+    if (!autoRetry) return false;
+    if (e is DioException) {
+      switch (e.type) {
+        case DioExceptionType.connectionTimeout:
+        case DioExceptionType.receiveTimeout:
+        case DioExceptionType.sendTimeout:
+        case DioExceptionType.connectionError:
+          return true;
+        case DioExceptionType.badResponse:
+          final c = e.response?.statusCode ?? 0;
+          return c >= 500 || c == 429 || c == 408;
+        case DioExceptionType.unknown:
+          final x = e.error;
+          return x is SocketException || x is HttpException || x is TlsException;
+        default:
+          return false;
+      }
+    }
+    if (e is SocketException || e is HttpException || e is TlsException) {
+      return true;
+    }
+    if (e is String) {
+      return e.startsWith('Connection timed out') ||
+          e.startsWith('No internet connection') ||
+          e.startsWith('Server error (5');
+    }
+    return false;
+  }
+
+  /// Put a download that hit a network problem on the retry list. False when
+  /// it failed too many times without any progress (then it is a real failure).
+  bool _scheduleRetry(DownloadItem item, _Run run) {
+    if (item.downloaded > run.startBytes) _failStreak[item.id] = 0;
+    final n = (_failStreak[item.id] ?? 0) + 1;
+    _failStreak[item.id] = n;
+    if (n > 12) return false;
+    final secs = (5 * (1 << (n > 4 ? 4 : n - 1))).clamp(5, 60);
+    _retryAt[item.id] =
+        DateTime.now().millisecondsSinceEpoch + secs * 1000;
+    _waitingForNet.add(item.id);
+    item.status = DlStatus.paused;
+    item.speed = 0;
+    return true;
+  }
+
   // ---------------------------------------------------------------- init
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
     wifiOnly = _prefs!.getBool('wifi_only') ?? false;
-    _wifiTimer ??=
-        Timer.periodic(const Duration(seconds: 5), (_) => _wifiTick());
+    maxActive = _prefs!.getInt('max_active') ?? 3;
+    speedLimit = _prefs!.getInt('speed_limit') ?? 0;
+    browserLimit = _prefs!.getInt('browser_limit') ?? 0;
+    autoRetry = _prefs!.getBool('auto_retry') ?? true;
+    _wifiTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      _wifiTick();
+      _netTick();
+    });
     final raw = _prefs!.getString('items');
     if (raw != null) {
       try {
@@ -218,6 +423,7 @@ class DownloadManager extends ChangeNotifier {
 
   void start(DownloadItem item) {
     if (_runs.containsKey(item.id)) return;
+    _waitingForNet.remove(item.id);
     if (item.status == DlStatus.completed) return;
     if (wifiOnly) {
       // Decide asynchronously; the item shows "Waiting for Wi-Fi" meanwhile.
@@ -309,15 +515,25 @@ class DownloadManager extends ChangeNotifier {
 
   void _begin(DownloadItem item) {
     if (_runs.containsKey(item.id)) return;
+    if (_runs.length >= maxActive) {
+      // all slots busy: wait in the queue
+      item.status = DlStatus.queued;
+      item.speed = 0;
+      item.error = null;
+      notifyListeners();
+      _save();
+      return;
+    }
     item.status = DlStatus.downloading;
     item.error = null;
-    final run = _Run();
+    final run = _Run()..startBytes = item.downloaded;
     _runs[item.id] = run;
     notifyListeners();
     _execute(item, run);
   }
 
   void pause(DownloadItem item) {
+    _waitingForNet.remove(item.id);
     final run = _runs[item.id];
     item.status = DlStatus.paused;
     item.speed = 0;
@@ -443,6 +659,8 @@ class DownloadManager extends ChangeNotifier {
       item.speed = 0;
       if (CancelToken.isCancel(e)) {
         // pause()/remove() already set the status
+      } else if (_isTransient(e) && _scheduleRetry(item, run)) {
+        // network problem: retried automatically
       } else {
         item.status = DlStatus.failed;
         item.error = _dioMessage(e);
@@ -452,14 +670,21 @@ class DownloadManager extends ChangeNotifier {
       item.speed = 0;
       if (run.token.isCancelled) {
         // fine
+      } else if (_isTransient(e) && _scheduleRetry(item, run)) {
+        // network problem: retried automatically
       } else {
         item.status = DlStatus.failed;
         item.error = e.toString();
       }
     } finally {
       _runs.remove(item.id);
+      if (item.status == DlStatus.completed) {
+        _failStreak.remove(item.id);
+        _retryAt.remove(item.id);
+      }
       notifyListeners();
       await _save();
+      _pump(); // a slot is free: start the next queued download
     }
   }
 
@@ -545,6 +770,7 @@ class DownloadManager extends ChangeNotifier {
         sink.add(chunk);
         run.segBytes[index] += chunk.length;
         _syncDownloaded(item, run);
+        await _pace(run, chunk.length);
       }
       await sink.flush();
     } finally {
@@ -639,7 +865,9 @@ class DownloadManager extends ChangeNotifier {
                 responseType: ResponseType.bytes, headers: item.headers),
             cancelToken: run.token,
           );
-          return r.data ?? const <int>[];
+          final data = r.data ?? const <int>[];
+          await _pace(run, data.length);
+          return data;
         } on DioException catch (e) {
           if (CancelToken.isCancel(e)) rethrow;
           last = e;
@@ -734,6 +962,7 @@ class DownloadManager extends ChangeNotifier {
       await for (final chunk in resp.data!.stream) {
         sink.add(chunk);
         item.downloaded += chunk.length;
+        await _pace(run, chunk.length);
       }
       await sink.flush();
     } finally {
