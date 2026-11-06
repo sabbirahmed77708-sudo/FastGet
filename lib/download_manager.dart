@@ -353,6 +353,32 @@ class DownloadManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Folder chosen as default (shown in settings).
+  String get preferredDirSync =>
+      _prefs?.getString('save_dir') ?? '/storage/emulated/0/Download/FastGet';
+
+  /// Removes several downloads at once.
+  Future<void> removeMany(Iterable<DownloadItem> list,
+      {bool deleteFiles = false}) async {
+    final all = list.toList();
+    for (final it in all) {
+      _runs[it.id]?.token.cancel('removed');
+      items.remove(it);
+    }
+    notifyListeners();
+    await Future.delayed(const Duration(milliseconds: 300));
+    for (final it in all) {
+      await _deleteParts(it);
+      if (deleteFiles) {
+        try {
+          final f = File(it.savePath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    }
+    await _save();
+  }
+
   Future<void> remove(DownloadItem item, {bool deleteFile = false}) async {
     final run = _runs[item.id];
     run?.token.cancel('removed');

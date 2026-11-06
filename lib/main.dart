@@ -5,6 +5,7 @@ import 'download_manager.dart';
 import 'l10n.dart';
 import 'link_intake.dart';
 import 'notifier.dart';
+import 'notify_settings.dart';
 import 'screens/home_screen.dart';
 import 'theme.dart';
 import 'updater.dart';
@@ -14,6 +15,7 @@ Future<void> main() async {
   await DownloadManager.instance.init();
   await L10n.instance.init();
   await BrowserController.instance.init();
+  await NotifySettings.instance.init();
   DownloadNotifier.instance.start();
   runApp(const FastGetApp());
   LinkIntake.instance.start();

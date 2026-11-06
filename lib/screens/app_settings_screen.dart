@@ -4,7 +4,9 @@ import '../browser/browser_controller.dart';
 import '../browser/sheets.dart';
 import '../download_manager.dart';
 import '../l10n.dart';
+import '../folder_picker.dart';
 import 'about_screen.dart';
+import 'notification_settings_screen.dart';
 
 /// App-level settings (downloads, appearance, language).
 class AppSettingsScreen extends StatelessWidget {
@@ -57,7 +59,24 @@ class AppSettingsScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.folder_outlined),
               title: const T('Download folder'),
-              subtitle: const Text('Download/FastGet'),
+              subtitle: Text(prettyPath(dm.preferredDirSync)),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () async {
+                final cur = await dm.preferredDir();
+                if (!context.mounted) return;
+                final p = await pickFolder(context, start: cur);
+                if (p != null) await dm.setPreferredDir(p);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.notifications_outlined),
+              title: const T('Notification settings'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NotificationSettingsScreen()),
+              ),
             ),
             ListTile(
               leading: const Icon(Icons.public_rounded),

@@ -1,5 +1,6 @@
 package __PACKAGE__
 
+import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -7,6 +8,7 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.android.FlutterActivity
@@ -28,12 +30,16 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         const val ENGINE_ID = "drom_engine"
+        const val EXTRA_OPEN = "drom_open"
 
         private var shareChannel: MethodChannel? = null
         private var notifyChannel: MethodChannel? = null
 
         @Volatile
         private var pending: String? = null
+
+        @Volatile
+        private var pendingOpen: String? = null
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,12 +47,17 @@ class MainActivity : FlutterActivity() {
         if (!existed) createEngine()
         super.onCreate(savedInstanceState)
 
-        // A link shared into the app while the Dart side is already running
-        // (engine survived) is pushed right away; on a cold start Dart asks for it.
+        // A link shared into the app, or a tapped "download finished" notification,
+        // while the Dart side is already running (engine survived) is pushed right
+        // away; on a cold start Dart asks for it.
         if (savedInstanceState == null) {
             val text = sharedText(intent)
             if (text != null) {
                 if (existed) shareChannel?.invokeMethod("onShared", text) else pending = text
+            }
+            val open = openKey(intent)
+            if (open != null) {
+                if (existed) shareChannel?.invokeMethod("onOpen", open) else pendingOpen = open
             }
         }
     }
@@ -71,14 +82,19 @@ class MainActivity : FlutterActivity() {
     private fun setupChannels(ctx: Context, engine: FlutterEngine) {
         val messenger = engine.dartExecutor.binaryMessenger
 
-        // Links shared from other apps ("Share" -> DROM).
+        // Links shared from other apps ("Share" -> DROM) and notification taps.
         val share = MethodChannel(messenger, "drom/share")
         share.setMethodCallHandler { call, result ->
-            if (call.method == "getInitialText") {
-                result.success(pending)
-                pending = null
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                "getInitialText" -> {
+                    result.success(pending)
+                    pending = null
+                }
+                "getInitialOpen" -> {
+                    result.success(pendingOpen)
+                    pendingOpen = null
+                }
+                else -> result.notImplemented()
             }
         }
         shareChannel = share
@@ -95,7 +111,7 @@ class MainActivity : FlutterActivity() {
             else result.notImplemented()
         }
 
-        // Download notification + foreground service.
+        // Download notifications + foreground service.
         val notify = MethodChannel(messenger, "drom/notify")
         notify.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -133,6 +149,20 @@ class MainActivity : FlutterActivity() {
                     showDone(ctx, map)
                     result.success(true)
                 }
+                "enabled" -> {
+                    result.success(NotificationManagerCompat.from(ctx).areNotificationsEnabled())
+                }
+                "openSettings" -> {
+                    try {
+                        val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        ctx.startActivity(i)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.success(false)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -140,29 +170,52 @@ class MainActivity : FlutterActivity() {
         DownloadService.onAction = { action -> notifyChannel?.invokeMethod("onAction", action) }
     }
 
+    /** "Download complete / failed" (and test) notifications, built from the user's settings. */
     private fun showDone(ctx: Context, m: Map<String, Any?>) {
         try {
-            DownloadService.createChannels(ctx)
             val id = (m["id"] as? Number)?.toInt() ?: return
+            val sound = m["sound"] as? Boolean ?: true
+            val vibrate = m["vibrate"] as? Boolean ?: true
+            val popup = m["popup"] as? Boolean ?: true
+            val failed = m["failed"] == true
+            val visibility =
+                (m["visibility"] as? Number)?.toInt() ?: NotificationCompat.VISIBILITY_PUBLIC
+            val channel = DownloadService.doneChannelId(ctx, sound, vibrate, popup)
+
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                 (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
             val open = ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.apply {
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                // tapping a finished download opens the file
+                (m["openKey"] as? String)?.let { putExtra(EXTRA_OPEN, it) }
             }
-            val n = NotificationCompat.Builder(ctx, DownloadService.CHANNEL_DONE)
+
+            var defaults = 0
+            if (sound) defaults = defaults or Notification.DEFAULT_SOUND
+            if (vibrate) defaults = defaults or Notification.DEFAULT_VIBRATE
+
+            val title = m["title"] as? String ?: "DROM"
+            val text = m["text"] as? String ?: ""
+            val builder = NotificationCompat.Builder(ctx, channel)
                 .setSmallIcon(
-                    if (m["failed"] == true) android.R.drawable.stat_notify_error
+                    if (failed) android.R.drawable.stat_notify_error
                     else android.R.drawable.stat_sys_download_done
                 )
-                .setContentTitle(m["title"] as? String ?: "DROM")
-                .setContentText(m["text"] as? String ?: "")
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
                 .setAutoCancel(true)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                .apply {
-                    if (open != null) setContentIntent(PendingIntent.getActivity(ctx, 0, open, flags))
-                }
-                .build()
-            NotificationManagerCompat.from(ctx).notify(id, n)
+                .setPriority(
+                    if (popup) NotificationCompat.PRIORITY_HIGH
+                    else NotificationCompat.PRIORITY_DEFAULT
+                )
+                .setDefaults(defaults)
+                .setVisibility(visibility)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+            if (open != null) {
+                builder.setContentIntent(PendingIntent.getActivity(ctx, id, open, flags))
+            }
+            NotificationManagerCompat.from(ctx).notify(id, builder.build())
         } catch (_: Exception) {
             // no notification permission: ignore
         }
@@ -179,12 +232,14 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        val text = sharedText(intent) ?: return
-        shareChannel?.invokeMethod("onShared", text)
+        sharedText(intent)?.let { shareChannel?.invokeMethod("onShared", it) }
+        openKey(intent)?.let { shareChannel?.invokeMethod("onOpen", it) }
     }
 
     private fun sharedText(i: Intent?): String? {
         if (i == null || i.action != Intent.ACTION_SEND) return null
         return i.getStringExtra(Intent.EXTRA_TEXT)
     }
+
+    private fun openKey(i: Intent?): String? = i?.getStringExtra(EXTRA_OPEN)
 }

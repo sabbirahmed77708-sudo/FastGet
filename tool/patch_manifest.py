@@ -18,6 +18,7 @@ PERMS = [
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
     "android.permission.WAKE_LOCK",
+    "android.permission.VIBRATE",
     # installing an update that DROM downloaded itself
     "android.permission.REQUEST_INSTALL_PACKAGES",
 ]

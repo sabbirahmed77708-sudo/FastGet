@@ -16,16 +16,18 @@ import androidx.core.app.NotificationCompat
 
 /**
  * Keeps DROM alive while files are downloading (also after the app is closed)
- * and shows one notification with percent, MB, speed and Pause / Resume.
+ * and shows the download notifications: one per download (percent, MB, speed,
+ * Pause / Resume) plus a summary with Pause all / Resume all.
  *
  * The download engine itself runs in Dart; this service only holds the process
- * and draws the notification. Button presses go back to Dart through [onAction].
+ * and draws the notifications. Button presses go back to Dart through [onAction].
+ * What is shown (speed, time left, buttons, lock screen, ...) comes from the
+ * user's notification settings, which Dart puts into every update.
  */
 class DownloadService : Service() {
 
     companion object {
         const val CHANNEL_PROGRESS = "drom_downloads"
-        const val CHANNEL_DONE = "drom_done"
         const val NOTIF_ID = 4711
         const val GROUP = "drom_downloads_group"
         const val EXTRA_KEY = "key"
@@ -38,7 +40,7 @@ class DownloadService : Service() {
 
         @Volatile var instance: DownloadService? = null
 
-        /** Set by MainActivity: forwards "pauseAll" / "resumeAll" to Dart. */
+        /** Set by MainActivity: forwards button presses to Dart. */
         @Volatile var onAction: ((String) -> Unit)? = null
 
         fun createChannels(ctx: Context) {
@@ -50,11 +52,38 @@ class DownloadService : Service() {
                 description = "Shows download progress"
                 setShowBadge(false)
             }
-            val done = NotificationChannel(
-                CHANNEL_DONE, "Finished downloads", NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Tells you when a download finishes or fails" }
             nm.createNotificationChannel(progress)
-            nm.createNotificationChannel(done)
+        }
+
+        /**
+         * Channel for "download finished / failed" notifications. Sound, vibration
+         * and pop-up are channel properties on Android 8+, so every combination
+         * the user can pick gets its own channel (created when first needed).
+         */
+        fun doneChannelId(ctx: Context, sound: Boolean, vibrate: Boolean, popup: Boolean): String {
+            val id = "drom_done_" + (if (sound) "1" else "0") +
+                (if (vibrate) "1" else "0") + (if (popup) "1" else "0")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                if (nm.getNotificationChannel(id) == null) {
+                    val parts = ArrayList<String>()
+                    if (sound) parts.add("sound")
+                    if (vibrate) parts.add("vibrate")
+                    if (popup) parts.add("pop-up")
+                    val label = if (parts.isEmpty()) "silent" else parts.joinToString(", ")
+                    val ch = NotificationChannel(
+                        id,
+                        "Finished downloads ($label)",
+                        if (popup) NotificationManager.IMPORTANCE_HIGH
+                        else NotificationManager.IMPORTANCE_DEFAULT
+                    )
+                    ch.description = "Tells you when a download finishes or fails"
+                    if (!sound) ch.setSound(null, null)
+                    ch.enableVibration(vibrate)
+                    nm.createNotificationChannel(ch)
+                }
+            }
+            return id
         }
 
         private fun fill(b: Bundle, m: Map<*, *>) {
@@ -65,6 +94,12 @@ class DownloadService : Service() {
             b.putBoolean("indeterminate", m["indeterminate"] as? Boolean ?: false)
             b.putBoolean("paused", m["paused"] as? Boolean ?: false)
             b.putString("actionLabel", m["actionLabel"] as? String ?: "")
+            b.putBoolean("showButtons", m["showButtons"] as? Boolean ?: true)
+            b.putBoolean("showProgress", m["showProgress"] as? Boolean ?: true)
+            b.putInt(
+                "visibility",
+                (m["visibility"] as? Number)?.toInt() ?: NotificationCompat.VISIBILITY_PUBLIC
+            )
         }
 
         /** Top-level bundle: the main notification + one bundle per download. */
@@ -159,6 +194,8 @@ class DownloadService : Service() {
         val text = b.getString("text") ?: ""
         val label = b.getString("actionLabel") ?: ""
         val key = b.getString("key") ?: b.getString("actionKey")
+        val showButtons = b.getBoolean("showButtons", true)
+        val showProgress = b.getBoolean("showProgress", true)
 
         val flags = PendingIntent.FLAG_UPDATE_CURRENT or
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
@@ -194,12 +231,15 @@ class DownloadService : Service() {
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(b.getInt("visibility", NotificationCompat.VISIBILITY_PUBLIC))
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .addAction(
+        if (showButtons && label.isNotEmpty()) {
+            builder.addAction(
                 if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
                 label,
                 actionPi
             )
+        }
         if (openPi != null) builder.setContentIntent(openPi)
 
         if (isSummary || isChild) {
@@ -208,7 +248,7 @@ class DownloadService : Service() {
             if (isSummary) builder.setGroupSummary(true)
         }
 
-        if (!paused) {
+        if (!paused && showProgress) {
             builder.setProgress(
                 b.getInt("max", 100),
                 b.getInt("progress", 0),

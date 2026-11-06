@@ -156,6 +156,7 @@ class _WebHostState extends State<_WebHost> {
       },
       onReceivedIcon: (c, Uint8List icon) {
         tab.update(() => tab.favicon = icon);
+        browser.rememberIcon(tab.url, icon);
       },
       onLoadStop: (c, url) async {
         if (url != null) tab.setUrl(url.toString());

@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../updater.dart';
 import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
+import '../browser/sheets.dart' show HistoryScreen;
 import 'app_settings_screen.dart';
 import '../l10n.dart';
 
@@ -27,6 +28,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final dm = DownloadManager.instance;
   _Filter _filter = _Filter.all;
+  final Set<String> _sel = {};
+
+  bool get _selecting => _sel.isNotEmpty;
 
   @override
   void initState() {
@@ -141,6 +145,61 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     if (!mounted) return;
     await showDownloadPrompt(context, DownloadRequest(url: u));
+  }
+
+  // ------------------------------------------------------- selection
+
+  void _toggle(DownloadItem d) {
+    setState(() {
+      if (!_sel.remove(d.id)) _sel.add(d.id);
+    });
+  }
+
+  void _selectAll() {
+    setState(() {
+      final ids = _visible.map((e) => e.id).toSet();
+      if (_sel.containsAll(ids)) {
+        _sel.clear();
+      } else {
+        _sel.addAll(ids);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final chosen = dm.items.where((e) => _sel.contains(e.id)).toList();
+    if (chosen.isEmpty) return;
+    var withFiles = false;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setD) => AlertDialog(
+          title: Text(L10n.instance.isBn
+              ? '${chosen.length} টি ডাউনলোড মুছবেন?'
+              : 'Delete ${chosen.length} download${chosen.length == 1 ? '' : 's'}?'),
+          content: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: withFiles,
+            onChanged: (v) => setD(() => withFiles = v ?? false),
+            title: const T('Also delete the files from the phone'),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const T('Cancel')),
+            FilledButton(
+                style: FilledButton.styleFrom(
+                    backgroundColor: Theme.of(ctx).colorScheme.error),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const T('Delete')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    setState(_sel.clear);
+    await dm.removeMany(chosen, deleteFiles: withFiles);
   }
 
   Future<void> _openBrowser() async {
@@ -268,6 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
         entry('lang', Icons.language_rounded, 'Language',
             note: L10n.instance.isBn ? 'বাংলা' : 'English'),
         const PopupMenuDivider(),
+        entry('history', Icons.history_rounded, 'History'),
         entry('share', Icons.share_rounded, 'Share app'),
         entry('settings', Icons.settings_outlined, 'Settings'),
         entry('about', Icons.info_outline_rounded, 'About',
@@ -295,6 +355,14 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 'lang':
         await showLanguageDialog(context);
+        break;
+      case 'history':
+        await Navigator.push<void>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => HistoryScreen(
+                  browser: BrowserController.instance, fromHome: true)),
+        );
         break;
       case 'share':
         await shareApp();
@@ -334,8 +402,37 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final items = _visible;
-    return Scaffold(
-      appBar: AppBar(
+    _sel.removeWhere((id) => !dm.items.any((e) => e.id == id));
+    return PopScope(
+      canPop: !_selecting,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(_sel.clear);
+      },
+      child: Scaffold(
+      appBar: _selecting
+          ? AppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.close_rounded),
+                onPressed: () => setState(_sel.clear),
+              ),
+              title: Text(L10n.instance.isBn
+                  ? '${_sel.length} টি বাছাই'
+                  : '${_sel.length} selected'),
+              actions: [
+                IconButton(
+                  tooltip: tr('Select all'),
+                  icon: const Icon(Icons.select_all_rounded),
+                  onPressed: _selectAll,
+                ),
+                IconButton(
+                  tooltip: tr('Delete'),
+                  icon: const Icon(Icons.delete_outline_rounded),
+                  onPressed: _deleteSelected,
+                ),
+                const SizedBox(width: 4),
+              ],
+            )
+          : AppBar(
         title: Text(widget.embedded ? tr('Downloads') : 'DROM'),
         actions: [
           // Browser icon and the three-dot menu are always there.
@@ -379,8 +476,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: _AddLinkButton(onTap: _showAddSheet),
-    );
+      floatingActionButton:
+          _selecting ? null : _AddLinkButton(onTap: _showAddSheet),
+    ));
   }
 
   Widget _summary() {
@@ -575,12 +673,20 @@ class _HomeScreenState extends State<HomeScreen> {
     final nameStyle = const TextStyle(
         fontWeight: FontWeight.w700, fontSize: 16.5, height: 1.25);
 
+    final selected = _sel.contains(d.id);
     return Card(
       margin: EdgeInsets.zero,
+      color: selected ? cs.primaryContainer : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: done ? () => OpenFilex.open(d.savePath) : null,
-        onLongPress: () => _confirmRemove(d),
+        onTap: _selecting
+            ? () => _toggle(d)
+            : (done ? () => OpenFilex.open(d.savePath) : null),
+        // long-press selects; tap more to select any number, delete together
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _toggle(d);
+        },
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
           child: Column(
@@ -596,7 +702,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: kind.color.withValues(alpha: 0.14),
                       borderRadius: BorderRadius.circular(13),
                     ),
-                    child: Icon(kind.icon, color: kind.color, size: 24),
+                    child: selected
+                        ? Icon(Icons.check_circle_rounded,
+                            color: cs.primary, size: 26)
+                        : Icon(kind.icon, color: kind.color, size: 24),
                   ),
                   const SizedBox(width: 12),
                   // the full file name, up to three lines
@@ -620,7 +729,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: nameStyle),
                   ),
-                  if (done)
+                  if (_selecting)
+                    Checkbox(value: selected, onChanged: (_) => _toggle(d))
+                  else if (done)
                     IconButton(
                       tooltip: tr('Open'),
                       visualDensity: VisualDensity.compact,
@@ -643,12 +754,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           : Icons.play_arrow_rounded),
                       onPressed: () => dm.start(d),
                     ),
-                  IconButton(
-                    tooltip: tr('More'),
-                    visualDensity: VisualDensity.compact,
-                    icon: const Icon(Icons.more_vert_rounded),
-                    onPressed: () => _confirmRemove(d),
-                  ),
+                  if (!_selecting)
+                    IconButton(
+                      tooltip: tr('More'),
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.more_vert_rounded),
+                      onPressed: () => _confirmRemove(d),
+                    ),
                 ],
               ),
               if (!done) ...[

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -104,6 +105,14 @@ class BrowserController extends ChangeNotifier {
     if (!p.containsKey('b_shortcuts')) shortcuts = [..._defaultShortcuts];
     bookmarks = _readList(p, 'b_bookmarks', Shortcut.fromJson);
     history = _readList(p, 'b_history', HistoryEntry.fromJson);
+    try {
+      final raw = p.getString('b_icons');
+      if (raw != null) {
+        (jsonDecode(raw) as Map<String, dynamic>).forEach((k, v) {
+          _icons[k] = base64Decode(v as String);
+        });
+      }
+    } catch (_) {}
 
     // restore tabs
     try {
@@ -160,6 +169,8 @@ class BrowserController extends ChangeNotifier {
         'b_bookmarks', jsonEncode(bookmarks.map((e) => e.toJson()).toList()));
     await p.setString('b_history',
         jsonEncode(history.take(500).map((e) => e.toJson()).toList()));
+    await p.setString('b_icons',
+        jsonEncode(_icons.map((k, v) => MapEntry(k, base64Encode(v)))));
     await saveTabs();
   }
 
@@ -406,11 +417,36 @@ class BrowserController extends ChangeNotifier {
 
   // ------------------------------------------------------------- history
 
+  /// Page icons (favicons) by site, so History can show them later.
+  final Map<String, Uint8List> _icons = {};
+
+  Uint8List? iconFor(String url) {
+    final h = Uri.tryParse(url)?.host ?? '';
+    return _icons[h];
+  }
+
+  void rememberIcon(String url, Uint8List? icon) {
+    final h = Uri.tryParse(url)?.host ?? '';
+    if (h.isEmpty || icon == null || icon.isEmpty || icon.length > 40000) {
+      return;
+    }
+    final old = _icons[h];
+    if (old != null && old.length == icon.length) return;
+    _icons.remove(h);
+    _icons[h] = icon;
+    while (_icons.length > 150) {
+      _icons.remove(_icons.keys.first);
+    }
+    notifyListeners();
+    save();
+  }
+
   void addHistory(BrowserTab t) {
     final u = t.url;
     if (u.isEmpty || !(u.startsWith('http://') || u.startsWith('https://'))) {
       return;
     }
+    rememberIcon(u, t.favicon);
     if (history.isNotEmpty && history.first.url == u) return;
     history.insert(
         0,
@@ -418,6 +454,13 @@ class BrowserController extends ChangeNotifier {
             DateTime.now().millisecondsSinceEpoch));
     if (history.length > 500) history.removeRange(500, history.length);
     save();
+  }
+
+  Future<void> removeHistory(Iterable<HistoryEntry> list) async {
+    final drop = list.toSet();
+    history.removeWhere(drop.contains);
+    notifyListeners();
+    await save();
   }
 
   Future<void> clearHistory() async {

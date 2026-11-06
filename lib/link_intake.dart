@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
 
 import 'browser/download_prompt.dart';
 import 'download_manager.dart';
+import 'models.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -31,10 +33,14 @@ class LinkIntake with WidgetsBindingObserver {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onShared' && call.arguments is String) {
         await handleText(call.arguments as String);
+      } else if (call.method == 'onOpen' && call.arguments is String) {
+        _openFinished(call.arguments as String);
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
+        final open = await _channel.invokeMethod<String>('getInitialOpen');
+        if (open != null && open.isNotEmpty) _openFinished(open);
         final initial = await _channel.invokeMethod<String>('getInitialText');
         if (initial != null && initial.isNotEmpty) {
           await handleText(initial);
@@ -52,6 +58,16 @@ class LinkIntake with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       // let the shared-text callback (if any) win first
       Future.delayed(const Duration(milliseconds: 600), _checkClipboard);
+    }
+  }
+
+  /// Tapped "Download complete" notification: open that file.
+  void _openFinished(String id) {
+    for (final it in DownloadManager.instance.items) {
+      if (it.id == id && it.status == DlStatus.completed) {
+        OpenFilex.open(it.savePath);
+        return;
+      }
     }
   }
 
