@@ -66,6 +66,20 @@ if "android.intent.action.SEND" not in xml:
         sys.exit("AndroidManifest.xml has no </activity> tag")
     xml = xml.replace("</activity>", share_filter + "    </activity>", 1)
 
+# Links tapped in other apps: DROM shows up in "Open with" and can be chosen
+# as the default browser (http / https, VIEW + BROWSABLE).
+if 'android:scheme="https"' not in xml:
+    view_filter = (
+        "        <intent-filter>\n"
+        '            <action android:name="android.intent.action.VIEW"/>\n'
+        '            <category android:name="android.intent.category.DEFAULT"/>\n'
+        '            <category android:name="android.intent.category.BROWSABLE"/>\n'
+        '            <data android:scheme="http"/>\n'
+        '            <data android:scheme="https"/>\n'
+        "        </intent-filter>\n"
+    )
+    xml = xml.replace("</activity>", view_filter + "    </activity>", 1)
+
 # Foreground service that keeps downloads alive in the background.
 if "DownloadService" not in xml:
     service = (

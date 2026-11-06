@@ -236,9 +236,18 @@ class MainActivity : FlutterActivity() {
         openKey(intent)?.let { shareChannel?.invokeMethod("onOpen", it) }
     }
 
+    // "Share" -> DROM gives the link as text; tapping a link and choosing
+    // DROM ("Open with") gives it as the intent data.
     private fun sharedText(i: Intent?): String? {
-        if (i == null || i.action != Intent.ACTION_SEND) return null
-        return i.getStringExtra(Intent.EXTRA_TEXT)
+        if (i == null) return null
+        return when (i.action) {
+            Intent.ACTION_SEND -> i.getStringExtra(Intent.EXTRA_TEXT)
+            Intent.ACTION_VIEW -> {
+                val u = i.data
+                if (u != null && (u.scheme == "http" || u.scheme == "https")) u.toString() else null
+            }
+            else -> null
+        }
     }
 
     private fun openKey(i: Intent?): String? = i?.getStringExtra(EXTRA_OPEN)
