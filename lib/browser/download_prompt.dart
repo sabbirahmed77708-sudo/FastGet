@@ -62,13 +62,20 @@ const List<(String, String)> _quickFolders = [
 /// Returns true when the download started.
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
+  // the save folder is a quick local lookup: have it ready so the popup opens
+  // complete, with nothing popping in afterwards
+  String? dir;
+  try {
+    dir = await DownloadManager.instance.preferredDir();
+  } catch (_) {}
+  if (!context.mounted) return false;
   final result = await showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.55),
     transitionDuration: const Duration(milliseconds: 380),
-    pageBuilder: (_, __, ___) => _PromptSheet(req: req),
+    pageBuilder: (_, __, ___) => _PromptSheet(req: req, initialDir: dir),
     // one calm motion: slide up + fade, no overshoot, drawn as a cached layer
     transitionBuilder: (context, anim, _, child) {
       final c = CurvedAnimation(
@@ -91,7 +98,8 @@ Future<bool> showDownloadPrompt(
 
 class _PromptSheet extends StatefulWidget {
   final DownloadRequest req;
-  const _PromptSheet({required this.req});
+  final String? initialDir;
+  const _PromptSheet({required this.req, this.initialDir});
 
   @override
   State<_PromptSheet> createState() => _PromptSheetState();
@@ -152,11 +160,17 @@ class _PromptSheetState extends State<_PromptSheet> {
         text: _looksLikeFileName(fromUrl)
             ? fromUrl
             : (given.isNotEmpty ? given : fromUrl));
-    // network + folder lookup start after the popup has settled, so nothing
-    // rebuilds while it is moving
-    final settled = Future.delayed(const Duration(milliseconds: 400));
-    _probe = settled.then((_) => _load());
-    settled.then((_) => _initDir());
+    _dir = widget.initialDir;
+    if (_dir == null) _initDir();
+    // The file check starts at once (so it is ready as early as possible) but
+    // its answer is shown only after the popup has finished moving, so nothing
+    // rebuilds mid-animation. A slow server never blocks the popup.
+    final settled = Future.delayed(const Duration(milliseconds: 380));
+    _probe = Future.wait<Object?>([
+      settled,
+      _load().timeout(const Duration(seconds: 12),
+          onTimeout: () => const ProbeResult(-1, false, null, null)),
+    ]).then((r) => r[1] as ProbeResult);
   }
 
   @override
@@ -296,7 +310,11 @@ class _PromptSheetState extends State<_PromptSheet> {
               constraints: const BoxConstraints(maxWidth: 440),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                child: Column(
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.topCenter,
+                  child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -386,7 +404,6 @@ class _PromptSheetState extends State<_PromptSheet> {
                             flex: 2,
                             child: FilledButton.icon(
                               onPressed: (_busy ||
-                                      loading ||
                                       blocked ||
                                       _dir == null)
                                   ? null
@@ -407,6 +424,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
             ),
