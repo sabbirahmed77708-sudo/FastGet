@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -9,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'download_manager.dart';
+import 'patcher.dart';
 
 /// GitHub repository that publishes DROM builds as Releases.
 const String kRepo = 'sabbirahmed77708-sudo/FastGet';
@@ -19,16 +21,30 @@ class UpdateInfo {
   final String notes;
   final String apkUrl;
   final int size;
+
+  /// Small patch from the installed build to this one (optional): only the
+  /// changed part is downloaded, the app rebuilds the full APK from it.
+  final String? patchUrl;
+  final int patchSize;
+  final String? shaUrl; // hash of the full new APK, to check the rebuilt file
   const UpdateInfo({
     required this.build,
     required this.name,
     required this.notes,
     required this.apkUrl,
     required this.size,
+    this.patchUrl,
+    this.patchSize = 0,
+    this.shaUrl,
   });
+
+  bool get hasPatch => patchUrl != null && shaUrl != null && patchSize > 0;
+
+  /// What really has to be downloaded.
+  int get downloadSize => hasPatch ? patchSize : size;
 }
 
-enum UpdatePhase { idle, downloading, ready, error }
+enum UpdatePhase { idle, downloading, patching, ready, error }
 
 /// Looks for a newer DROM build in the GitHub Releases of [kRepo].
 ///
@@ -55,6 +71,10 @@ class UpdateChecker extends ChangeNotifier {
   String? updateError;
   String? _apkPath;
   int _readyBuild = 0; // build of the APK that is downloaded and waiting
+  int _patchFailedBuild = 0; // patch did not work for this build: use full APK
+
+  /// True while only the small patch (not the whole APK) is being downloaded.
+  bool usingPatch = false;
   CancelToken? _token;
 
   /// Build number the "update available" pop-up was already shown for.
@@ -127,11 +147,16 @@ class UpdateChecker extends ChangeNotifier {
   /// first (see [maybePromptUpdate]).
   Future<void> startUpdate({bool auto = false}) async {
     final info = available;
-    if (info == null || phase == UpdatePhase.downloading) return;
+    if (info == null ||
+        phase == UpdatePhase.downloading ||
+        phase == UpdatePhase.patching) {
+      return;
+    }
     phase = UpdatePhase.downloading;
     received = 0;
     speed = 0;
-    totalBytes = info.size;
+    usingPatch = info.hasPatch && _patchFailedBuild != info.build;
+    totalBytes = usingPatch ? info.patchSize : info.size;
     updateError = null;
     autoDownloaded = auto;
     notifyListeners();
@@ -171,32 +196,35 @@ class UpdateChecker extends ChangeNotifier {
         maxRedirects: 8,
         headers: {'User-Agent': 'DROM-app'},
       ));
-      var tick = DateTime.now();
-      var lastBytes = 0;
-      await dio.download(
-        info.apkUrl,
-        tmp,
-        cancelToken: token,
-        onReceiveProgress: (r, t) {
-          received = r;
-          if (t > 0) totalBytes = t;
-          final now = DateTime.now();
-          final ms = now.difference(tick).inMilliseconds;
-          if (ms > 250) {
-            final inst = (r - lastBytes) * 1000 / ms;
-            speed = speed == 0 ? inst : speed * 0.7 + inst * 0.3;
-            lastBytes = r;
-            tick = now;
-            notifyListeners();
-          }
-        },
-      );
-      final f = File(tmp);
-      if (info.size > 0 && await f.length() != info.size) {
-        await f.delete();
-        throw 'Update download incomplete';
+      // 1) the small patch: download only what changed and rebuild the APK
+      var rebuilt = false;
+      if (usingPatch) {
+        try {
+          rebuilt = await _tryPatch(dio, info, path, tmp, token);
+        } on DioException catch (e) {
+          if (CancelToken.isCancel(e)) rethrow;
+        } catch (_) {}
+        if (!rebuilt) {
+          // anything went wrong: the full APK takes over, safe and simple
+          _patchFailedBuild = info.build;
+          usingPatch = false;
+          phase = UpdatePhase.downloading;
+          received = 0;
+          speed = 0;
+          totalBytes = info.size;
+          notifyListeners();
+        }
       }
-      await f.rename(path);
+      // 2) the full APK
+      if (!rebuilt) {
+        await _downloadFile(dio, info.apkUrl, tmp, token);
+        final f = File(tmp);
+        if (info.size > 0 && await f.length() != info.size) {
+          await f.delete();
+          throw 'Update download incomplete';
+        }
+        await f.rename(path);
+      }
       _apkPath = path;
       speed = 0;
       await _rememberPending(info);
@@ -217,6 +245,68 @@ class UpdateChecker extends ChangeNotifier {
       updateError = e.toString();
       notifyListeners();
     }
+  }
+
+  /// Downloads [url] to [savePath] and keeps progress / speed up to date.
+  Future<void> _downloadFile(
+      Dio dio, String url, String savePath, CancelToken token) async {
+    received = 0;
+    var tick = DateTime.now();
+    var lastBytes = 0;
+    await dio.download(
+      url,
+      savePath,
+      cancelToken: token,
+      onReceiveProgress: (r, t) {
+        received = r;
+        if (t > 0) totalBytes = t;
+        final now = DateTime.now();
+        final ms = now.difference(tick).inMilliseconds;
+        if (ms > 250) {
+          final inst = (r - lastBytes) * 1000 / ms;
+          speed = speed == 0 ? inst : speed * 0.7 + inst * 0.3;
+          lastBytes = r;
+          tick = now;
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  /// Downloads the small patch, rebuilds the new APK from the installed one
+  /// and checks it against the published SHA-256. Returns false on any problem
+  /// (the caller then downloads the full APK).
+  Future<bool> _tryPatch(Dio dio, UpdateInfo info, String path, String tmp,
+      CancelToken token) async {
+    final patchPath = '$path.patch';
+    // hash of the finished APK (a tiny text file)
+    final r = await dio.get<String>(info.shaUrl!,
+        cancelToken: token,
+        options: Options(responseType: ResponseType.plain));
+    final sha = (r.data ?? '').trim().toLowerCase();
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(sha)) return false;
+
+    await _downloadFile(dio, info.patchUrl!, patchPath, token);
+    if (await File(patchPath).length() != info.patchSize) return false;
+
+    phase = UpdatePhase.patching;
+    speed = 0;
+    notifyListeners();
+    final oldApk =
+        await const MethodChannel('drom/app').invokeMethod<String>('apkPath');
+    if (oldApk == null || !File(oldApk).existsSync()) return false;
+    final got = await applyDromPatchInBackground(oldApk, patchPath, tmp);
+    try {
+      File(patchPath).deleteSync();
+    } catch (_) {}
+    if (got != sha) {
+      try {
+        File(tmp).deleteSync();
+      } catch (_) {}
+      return false;
+    }
+    await File(tmp).rename(path);
+    return true;
   }
 
   void cancelUpdate() {
@@ -333,15 +423,22 @@ class UpdateChecker extends ChangeNotifier {
       final m = RegExp(r'(\d+)\s*$').firstMatch(tag);
       final remote = m != null ? int.parse(m.group(1)!) : 0;
 
-      String? apk;
-      var size = 0;
+      String? apk, patchUrl, shaUrl;
+      var size = 0, patchSize = 0;
+      final patchName = 'drom-patch-from-$build.bin';
       for (final a in (data['assets'] as List? ?? const [])) {
         final am = Map<String, dynamic>.from(a as Map);
         final n = (am['name'] ?? '').toString().toLowerCase();
-        if (n.endsWith('.apk')) {
-          apk = am['browser_download_url']?.toString();
-          size = (am['size'] as num?)?.toInt() ?? 0;
-          break;
+        final url = am['browser_download_url']?.toString();
+        final sz = (am['size'] as num?)?.toInt() ?? 0;
+        if (n.endsWith('.apk') && apk == null) {
+          apk = url;
+          size = sz;
+        } else if (build > 0 && n == patchName) {
+          patchUrl = url;
+          patchSize = sz;
+        } else if (n == 'drom.sha256') {
+          shaUrl = url;
         }
       }
 
@@ -352,6 +449,9 @@ class UpdateChecker extends ChangeNotifier {
           notes: (data['body'] ?? '').toString().trim(),
           apkUrl: apk,
           size: size,
+          patchUrl: patchUrl,
+          patchSize: patchSize,
+          shaUrl: shaUrl,
         );
       } else {
         available = null;

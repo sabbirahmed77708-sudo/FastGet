@@ -4,6 +4,14 @@ import 'l10n.dart';
 import 'models.dart';
 import 'updater.dart';
 
+/// " · 2.4 MB · only the changed part" or " · 55 MB" (leading separator).
+String updateSizeLabel(UpdateInfo i) {
+  if (i.hasPatch) {
+    return ' · ${formatBytes(i.patchSize)} · ${tr('only the changed part')}';
+  }
+  return i.size > 0 ? ' · ${formatBytes(i.size)}' : '';
+}
+
 String _left(int sec) {
   if (sec < 0) return '--';
   if (sec < 60) return '${sec}s';
@@ -57,8 +65,10 @@ class UpdateActionButton extends StatelessWidget {
               Expanded(
                 child: Text(
                   up.speed > 0
-                      ? '${tr('Downloading update')} · ${formatBytes(up.speed)}/s · ${_left(up.etaSeconds)} ${tr('left')}'
-                      : tr('Downloading update'),
+                      ? '${tr(up.usingPatch ? 'Downloading update (changed part only)' : 'Downloading update')} · ${formatBytes(up.speed)}/s · ${_left(up.etaSeconds)} ${tr('left')}'
+                      : tr(up.usingPatch
+                          ? 'Downloading update (changed part only)'
+                          : 'Downloading update'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant),
@@ -67,6 +77,19 @@ class UpdateActionButton extends StatelessWidget {
               TextButton(
                   onPressed: up.cancelUpdate, child: const T('Cancel')),
             ]),
+          ],
+        );
+      case UpdatePhase.patching:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: const LinearProgressIndicator(minHeight: 7),
+            ),
+            const SizedBox(height: 8),
+            T('Applying update…',
+                style: TextStyle(fontSize: 12.5, color: cs.onSurfaceVariant)),
           ],
         );
       case UpdatePhase.ready:
@@ -148,7 +171,7 @@ class UpdateBanner extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                             color: cs.onPrimaryContainer)),
                     Text(
-                      '${info.name}${info.size > 0 ? ' · ${formatBytes(info.size)}' : ''}',
+                      '${info.name}${updateSizeLabel(info)}',
                       style: TextStyle(
                           fontSize: 12.5,
                           color: cs.onPrimaryContainer.withValues(alpha: 0.8)),
@@ -181,7 +204,7 @@ Future<void> maybePromptUpdate(BuildContext context) async {
         icon: const Icon(Icons.install_mobile_rounded, size: 32),
         title: const T('Update ready'),
         content: Text(
-          '${info.name}${info.size > 0 ? ' · ${formatBytes(info.size)}' : ''}\n\n'
+          '${info.name}${updateSizeLabel(info)}\n\n'
           '${tr('The new version is downloaded. Install it now?')}',
         ),
         actions: [
@@ -206,7 +229,7 @@ Future<void> maybePromptUpdate(BuildContext context) async {
       icon: const Icon(Icons.system_update_rounded, size: 32),
       title: const T('Update available'),
       content: Text(
-        '${info.name}${info.size > 0 ? ' · ${formatBytes(info.size)}' : ''}\n\n'
+        '${info.name}${updateSizeLabel(info)}\n\n'
         '${tr('Download and install the new version now?')}',
       ),
       actions: [

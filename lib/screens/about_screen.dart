@@ -110,7 +110,7 @@ class _AboutScreenState extends State<AboutScreen> {
           ]),
           const SizedBox(height: 8),
           Text(
-            '${info.name}${info.size > 0 ? ' · ${formatBytes(info.size)}' : ''}',
+            '${info.name}${updateSizeLabel(info)}',
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
           ),
           if (notes.isNotEmpty) ...[
@@ -142,7 +142,9 @@ class _AboutScreenState extends State<AboutScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             body,
-            if (!up.checking && up.phase != UpdatePhase.downloading) ...[
+            if (!up.checking &&
+                up.phase != UpdatePhase.downloading &&
+                up.phase != UpdatePhase.patching) ...[
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: () => up.check(),

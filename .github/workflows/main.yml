@@ -67,6 +67,16 @@ jobs:
       - name: Name the APK
         run: cp build/app/outputs/flutter-apk/app-release.apk DROM.apk
 
+      # Small patches (old APK -> new APK) so the app downloads only what changed.
+      # A failure here never blocks the release: the app then downloads the full APK.
+      - name: Make update patches
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install bsdiff4
+          python3 tool/make_patches.py DROM.apk ${{ github.run_number }} patches
+
       - uses: actions/upload-artifact@v4
         with:
           name: DROM-apk
@@ -78,7 +88,9 @@ jobs:
         run: |
           # release notes = the commit message (what the "What's new" page shows)
           git log -1 --pretty=%B | grep -v -E '^(Co-Authored-By|Claude-Session):' > notes.txt
-          gh release create "build-${{ github.run_number }}" DROM.apk \
+          EXTRA=""
+          if [ -f patches/DROM.sha256 ]; then EXTRA="$(ls patches/*)"; fi
+          gh release create "build-${{ github.run_number }}" DROM.apk $EXTRA \
             --title "DROM build ${{ github.run_number }}" \
             --notes-file notes.txt \
             --latest
