@@ -4,6 +4,8 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import java.security.MessageDigest
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -107,8 +109,12 @@ class MainActivity : FlutterActivity() {
 
         // "Share app": path of the installed APK so Dart can share the file itself.
         MethodChannel(messenger, "drom/app").setMethodCallHandler { call, result ->
-            if (call.method == "apkPath") result.success(ctx.packageCodePath)
-            else result.notImplemented()
+            when (call.method) {
+                "apkPath" -> result.success(ctx.packageCodePath)
+                // is this APK signed like the installed app? ("ok", "signature", "package", "invalid")
+                "apkCompat" -> result.success(apkCompat(ctx, call.argument<String>("path")))
+                else -> result.notImplemented()
+            }
         }
 
         // Download notifications + foreground service.
@@ -218,6 +224,40 @@ class MainActivity : FlutterActivity() {
             NotificationManagerCompat.from(ctx).notify(id, builder.build())
         } catch (_: Exception) {
             // no notification permission: ignore
+        }
+    }
+
+    private fun signerHashes(pi: android.content.pm.PackageInfo): Set<String> {
+        val out = HashSet<String>()
+        val md = { b: ByteArray ->
+            MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pi.signingInfo?.apkContentsSigners?.forEach { out.add(md(it.toByteArray())) }
+        } else {
+            @Suppress("DEPRECATION")
+            pi.signatures?.forEach { out.add(md(it.toByteArray())) }
+        }
+        return out
+    }
+
+    private fun apkCompat(ctx: Context, path: String?): String {
+        if (path == null) return "invalid"
+        try {
+            val pm = ctx.packageManager
+            val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+                PackageManager.GET_SIGNING_CERTIFICATES
+            else
+                @Suppress("DEPRECATION") PackageManager.GET_SIGNATURES
+            val archive = pm.getPackageArchiveInfo(path, flags) ?: return "invalid"
+            if (archive.packageName != ctx.packageName) return "package"
+            val mine = pm.getPackageInfo(ctx.packageName, flags)
+            val a = signerHashes(archive)
+            val b = signerHashes(mine)
+            if (a.isEmpty() || b.isEmpty()) return "ok" // cannot tell: let Android decide
+            return if (a == b) "ok" else "signature"
+        } catch (e: Exception) {
+            return "ok"
         }
     }
 

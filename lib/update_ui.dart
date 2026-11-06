@@ -141,6 +141,101 @@ class UpdateActionButton extends StatelessWidget {
   }
 }
 
+/// "6 Nov 2026 · 4:20 PM"
+String formatReleaseDate(DateTime? d) {
+  if (d == null) return '';
+  const en = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const bn = ['জানু', 'ফেব্রু', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+  final m = (L10n.instance.isBn ? bn : en)[d.month - 1];
+  final h12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final mm = d.minute.toString().padLeft(2, '0');
+  return '${d.day} $m ${d.year} · $h12:$mm ${d.hour >= 12 ? 'PM' : 'AM'}';
+}
+
+/// Every published version with its date and what changed.
+class UpdateHistory extends StatelessWidget {
+  const UpdateHistory({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final up = UpdateChecker.instance;
+    final cs = Theme.of(context).colorScheme;
+    if (up.history.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 22, 4, 8),
+          child: T('Update history',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+        ),
+        for (final r in up.history)
+          Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Text('${tr('Build')} ${r.build}',
+                        style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(width: 8),
+                    if (r.build == up.build)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(tr('Installed'),
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onPrimaryContainer)),
+                      )
+                    else if (r.build > up.build)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(tr('New'),
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white)),
+                      ),
+                    const Spacer(),
+                    Text(formatReleaseDate(r.date),
+                        style: TextStyle(
+                            fontSize: 12, color: cs.onSurfaceVariant)),
+                  ]),
+                  if (r.notes.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      r.notes
+                          .split('\n')
+                          .map((e) => e.trim().replaceFirst(RegExp(r'^[-*•]\s*'), ''))
+                          .where((e) => e.isNotEmpty)
+                          .take(8)
+                          .map((e) => '• $e')
+                          .join('\n'),
+                      style: const TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Banner on the home screen while a new version is available.
 class UpdateBanner extends StatelessWidget {
   const UpdateBanner({super.key});
@@ -171,7 +266,7 @@ class UpdateBanner extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                             color: cs.onPrimaryContainer)),
                     Text(
-                      '${info.name}${updateSizeLabel(info)}',
+                      '${info.name}${updateSizeLabel(info)}${info.published != null ? ' · ${formatReleaseDate(info.published)}' : ''}',
                       style: TextStyle(
                           fontSize: 12.5,
                           color: cs.onPrimaryContainer.withValues(alpha: 0.8)),

@@ -27,6 +27,7 @@ class UpdateInfo {
   final String? patchUrl;
   final int patchSize;
   final String? shaUrl; // hash of the full new APK, to check the rebuilt file
+  final DateTime? published; // when this build was released (local time)
   const UpdateInfo({
     required this.build,
     required this.name,
@@ -36,6 +37,7 @@ class UpdateInfo {
     this.patchUrl,
     this.patchSize = 0,
     this.shaUrl,
+    this.published,
   });
 
   bool get hasPatch => patchUrl != null && shaUrl != null && patchSize > 0;
@@ -43,6 +45,17 @@ class UpdateInfo {
   /// What really has to be downloaded.
   int get downloadSize => hasPatch ? patchSize : size;
 }
+
+/// One published version for the update history in About.
+class ReleaseNote {
+  final int build;
+  final String name;
+  final String notes;
+  final DateTime? date;
+  const ReleaseNote(this.build, this.name, this.notes, this.date);
+}
+
+const MethodChannel _appCh = MethodChannel('drom/app');
 
 enum UpdatePhase { idle, downloading, patching, ready, error }
 
@@ -322,6 +335,28 @@ class UpdateChecker extends ChangeNotifier {
       return;
     }
     try {
+      // Android's own message ("package conflicts...") is cryptic: check the
+      // signing key first and explain.
+      try {
+        final c = await _appCh.invokeMethod<String>('apkCompat', {'path': path});
+        if (c == 'signature') {
+          phase = UpdatePhase.error;
+          updateError =
+              'This build was signed with a different key, so Android will not install it over the current app. Uninstall DROM once and install the new version; after that updates install normally.';
+          notifyListeners();
+          return;
+        }
+        if (c == 'invalid') {
+          try {
+            File(path).deleteSync();
+          } catch (_) {}
+          phase = UpdatePhase.error;
+          updateError = 'The downloaded update file is damaged. Try again.';
+          _apkPath = null;
+          notifyListeners();
+          return;
+        }
+      } catch (_) {}
       if (!await Permission.requestInstallPackages.isGranted) {
         // opens "Install unknown apps" for DROM, once
         await Permission.requestInstallPackages.request();
@@ -392,6 +427,43 @@ class UpdateChecker extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// Recent versions with their dates, for the About page.
+  List<ReleaseNote> history = [];
+  bool historyLoaded = false;
+
+  Future<void> loadHistory() async {
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'DROM-app',
+        },
+      ));
+      final r = await dio
+          .get<dynamic>('https://api.github.com/repos/$kRepo/releases?per_page=12');
+      final out = <ReleaseNote>[];
+      for (final e in (r.data as List? ?? const [])) {
+        final m = Map<String, dynamic>.from(e as Map);
+        if (m['draft'] == true) continue;
+        final tag = (m['tag_name'] ?? '').toString();
+        final mm = RegExp(r'(\d+)\s*$').firstMatch(tag);
+        if (mm == null) continue;
+        out.add(ReleaseNote(
+          int.parse(mm.group(1)!),
+          (m['name'] ?? tag).toString(),
+          (m['body'] ?? '').toString().trim(),
+          DateTime.tryParse((m['published_at'] ?? '').toString())?.toLocal(),
+        ));
+      }
+      out.sort((a, b) => b.build.compareTo(a.build));
+      history = out;
+      historyLoaded = true;
+      notifyListeners();
+    } catch (_) {}
+  }
+
   Future<void> check({bool silent = false}) async {
     if (checking) return;
     checking = true;
@@ -452,6 +524,9 @@ class UpdateChecker extends ChangeNotifier {
           patchUrl: patchUrl,
           patchSize: patchSize,
           shaUrl: shaUrl,
+          published:
+              DateTime.tryParse((data['published_at'] ?? '').toString())
+                  ?.toLocal(),
         );
       } else {
         available = null;

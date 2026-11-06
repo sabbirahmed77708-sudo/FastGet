@@ -21,6 +21,7 @@ class _AboutScreenState extends State<AboutScreen> {
     super.initState();
     up.loadVersion();
     if (!up.checkedOnce) up.check();
+    up.loadHistory();
   }
 
   @override
@@ -73,6 +74,7 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 26),
               _updateCard(cs),
+              const UpdateHistory(),
             ],
           );
         },
@@ -110,7 +112,7 @@ class _AboutScreenState extends State<AboutScreen> {
           ]),
           const SizedBox(height: 8),
           Text(
-            '${info.name}${updateSizeLabel(info)}',
+            '${info.name}${updateSizeLabel(info)}${info.published != null ? ' · ${formatReleaseDate(info.published)}' : ''}',
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
           ),
           if (notes.isNotEmpty) ...[

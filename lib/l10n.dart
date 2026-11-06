@@ -366,4 +366,10 @@ const Map<String, String> _bn = {
   'Browser is open: the lower limit applies now': 'ব্রাউজার খোলা: এখন কম লিমিট চলছে',
   'Queued': 'কিউতে আছে',
   'Waiting for internet': 'ইন্টারনেটের অপেক্ষায়',
+  'Update history': 'আপডেটের ইতিহাস',
+  'Build': 'বিল্ড',
+  'Installed': 'ইনস্টল করা',
+  'New': 'নতুন',
+  'This build was signed with a different key, so Android will not install it over the current app. Uninstall DROM once and install the new version; after that updates install normally.': 'এই বিল্ড আলাদা সাইনিং কি দিয়ে বানানো, তাই অ্যান্ড্রয়েড বর্তমান অ্যাপের ওপর ইনস্টল করবে না। একবার DROM আনইনস্টল করে নতুন ভার্সন ইনস্টল করুন; এরপর থেকে আপডেট স্বাভাবিকভাবে ইনস্টল হবে।',
+  'The downloaded update file is damaged. Try again.': 'ডাউনলোড করা আপডেট ফাইলটি নষ্ট। আবার চেষ্টা করুন।',
 };
