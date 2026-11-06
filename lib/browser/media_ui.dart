@@ -111,6 +111,15 @@ class _MediaBubbleState extends State<MediaBubble> {
   }
 }
 
+String _urlName(String url) {
+  final last = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
+  try {
+    return Uri.decodeComponent(last);
+  } catch (_) {
+    return last;
+  }
+}
+
 String _safe(String s) {
   var n = s.replaceAll(RegExp(r'[\\/:*?"<>|\n\r\t]'), ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
   if (n.length > 60) n = n.substring(0, 60).trim();

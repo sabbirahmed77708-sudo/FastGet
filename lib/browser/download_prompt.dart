@@ -68,7 +68,6 @@ Future<bool> showDownloadPrompt(
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.55),
     transitionDuration: const Duration(milliseconds: 380),
-    reverseTransitionDuration: const Duration(milliseconds: 240),
     pageBuilder: (_, __, ___) => _PromptSheet(req: req),
     // one calm motion: slide up + fade, no overshoot, drawn as a cached layer
     transitionBuilder: (context, anim, _, child) {
