@@ -8,6 +8,8 @@ class DownloadItem {
   int total; // -1 = unknown
   int downloaded;
   bool rangeSupported;
+  bool hls; // HLS stream downloaded piece by piece
+  int segDone; // HLS pieces already saved
   Map<String, String> headers; // cookies / UA / referer from the browser
   DlStatus status;
   String? error;
@@ -23,6 +25,8 @@ class DownloadItem {
     this.total = -1,
     this.downloaded = 0,
     this.rangeSupported = false,
+    this.hls = false,
+    this.segDone = 0,
     this.headers = const {},
     this.status = DlStatus.queued,
     this.error,
@@ -41,6 +45,8 @@ class DownloadItem {
         'total': total,
         'downloaded': downloaded,
         'rangeSupported': rangeSupported,
+        'hls': hls,
+        'segDone': segDone,
         'headers': headers,
         'status': status.name,
         'error': error,
@@ -63,6 +69,8 @@ class DownloadItem {
       total: (j['total'] as num?)?.toInt() ?? -1,
       downloaded: (j['downloaded'] as num?)?.toInt() ?? 0,
       rangeSupported: j['rangeSupported'] as bool? ?? false,
+      hls: j['hls'] as bool? ?? false,
+      segDone: (j['segDone'] as num?)?.toInt() ?? 0,
       headers: ((j['headers'] as Map?) ?? const {})
           .map((k, v) => MapEntry(k.toString(), v.toString())),
       status: st,

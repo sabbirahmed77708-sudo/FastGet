@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'hls.dart';
 import 'models.dart';
 
 const int kSegments = 4;
@@ -37,7 +38,16 @@ class ProbeResult {
   final bool range;
   final String? fileName;
   final String? contentType;
-  const ProbeResult(this.total, this.range, this.fileName, this.contentType);
+  final bool hls;
+  const ProbeResult(this.total, this.range, this.fileName, this.contentType,
+      {this.hls = false});
+}
+
+bool _looksHls(String url, String? ct) {
+  final c = (ct ?? '').toLowerCase();
+  if (c.contains('mpegurl')) return true;
+  final p = (Uri.tryParse(url)?.path ?? '').toLowerCase();
+  return p.endsWith('.m3u8');
 }
 
 bool _isHtmlType(String? ct) {
@@ -172,13 +182,16 @@ class DownloadManager extends ChangeNotifier {
     }
     final hdrs = headers ?? const <String, String>{};
     final probe = await inspect(url, headers: hdrs);
-    final name = _uniqueName(
-        dir,
-        (suggestedName != null && suggestedName.trim().isNotEmpty
-                ? _sanitize(suggestedName)
-                : null) ??
-            probe.fileName ??
-            _nameFromUrl(uri));
+    var baseName = (suggestedName != null && suggestedName.trim().isNotEmpty
+            ? _sanitize(suggestedName)
+            : null) ??
+        probe.fileName ??
+        _nameFromUrl(uri);
+    if (probe.hls) {
+      baseName = baseName.replaceAll(RegExp(r'\.m3u8$', caseSensitive: false), '');
+      if (!baseName.contains('.')) baseName = '$baseName.ts';
+    }
+    final name = _uniqueName(dir, baseName);
     if (probe.contentType != null &&
         _isHtmlType(probe.contentType) &&
         !_nameIsWebPage(name)) {
@@ -191,6 +204,7 @@ class DownloadManager extends ChangeNotifier {
       dirPath: dir,
       total: probe.total,
       rangeSupported: probe.range,
+      hls: probe.hls,
       headers: hdrs,
     );
     items.insert(0, item);
@@ -283,6 +297,7 @@ class DownloadManager extends ChangeNotifier {
       if (await f.exists()) await f.delete();
     } catch (_) {}
     item.downloaded = 0;
+    item.segDone = 0;
     item.error = null;
     await _save();
     notifyListeners();
@@ -400,7 +415,7 @@ class DownloadManager extends ChangeNotifier {
   Future<void> _execute(DownloadItem item, _Run run) async {
     try {
       // Re-probe if metadata is unknown
-      if (item.total <= 0) {
+      if (!item.hls && item.total <= 0) {
         final p = await inspect(item.url, headers: item.headers);
         item.total = p.total;
         item.rangeSupported = p.range;
@@ -408,7 +423,9 @@ class DownloadManager extends ChangeNotifier {
 
       run.ticker = _startTicker(item, run);
 
-      if (item.rangeSupported && item.total > 0) {
+      if (item.hls) {
+        await _hlsDownload(item, run);
+      } else if (item.rangeSupported && item.total > 0) {
         await _multiSegment(item, run);
       } else {
         await _singleStream(item, run);
@@ -540,6 +557,160 @@ class DownloadManager extends ChangeNotifier {
     item.downloaded = sum;
   }
 
+  /// Plain GET of a small text file (playlists). Used by the browser too.
+  Future<String> fetchText(String url, {Map<String, String>? headers}) async {
+    if (isUnsupportedHost(url)) throw unsupportedMessage;
+    try {
+      final r = await _dio.get<String>(
+        url,
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: headers,
+          validateStatus: (s) => s != null && s < 400,
+        ),
+      );
+      return r.data ?? '';
+    } on DioException catch (e) {
+      throw _dioMessage(e);
+    }
+  }
+
+  /// HLS (.m3u8): pieces are fetched a few at a time, written in order into
+  /// one file, and can be paused / resumed at a piece boundary.
+  Future<void> _hlsDownload(DownloadItem item, _Run run) async {
+    var url = Uri.parse(item.url);
+    var text = (await _dio.get<String>(
+      item.url,
+      options: Options(responseType: ResponseType.plain, headers: item.headers),
+      cancelToken: run.token,
+    ))
+            .data ??
+        '';
+    if (isMasterPlaylist(text)) {
+      final m = parseMaster(text, url);
+      if (m.variants.isEmpty) throw 'No video found in this stream';
+      url = m.variants.first.url; // best quality
+      text = (await _dio.get<String>(
+        url.toString(),
+        options:
+            Options(responseType: ResponseType.plain, headers: item.headers),
+        cancelToken: run.token,
+      ))
+              .data ??
+          '';
+    }
+    final media = parseMedia(text, url);
+    if (media.encrypted) {
+      throw 'Protected (encrypted) streams cannot be downloaded';
+    }
+    if (media.live) throw 'Live streams cannot be downloaded';
+    if (media.segments.isEmpty) throw 'No video found in this stream';
+
+    final part = File(_partPath(item, 0));
+    if (item.segDone > 0 && await part.exists()) {
+      // drop anything written after the last saved position
+      final raf = await part.open(mode: FileMode.append);
+      try {
+        if (await raf.length() > item.downloaded) {
+          await raf.truncate(item.downloaded);
+        }
+      } finally {
+        await raf.close();
+      }
+    } else {
+      item.segDone = 0;
+      item.downloaded = 0;
+      if (await part.exists()) await part.delete();
+    }
+
+    Future<List<int>> fetch(Uri u) async {
+      Object? last;
+      for (var attempt = 0; attempt < 4; attempt++) {
+        if (run.token.isCancelled) throw DioException(
+            requestOptions: RequestOptions(path: ''),
+            type: DioExceptionType.cancel);
+        try {
+          final r = await _dio.get<List<int>>(
+            u.toString(),
+            options: Options(
+                responseType: ResponseType.bytes, headers: item.headers),
+            cancelToken: run.token,
+          );
+          return r.data ?? const <int>[];
+        } on DioException catch (e) {
+          if (CancelToken.isCancel(e)) rethrow;
+          last = e;
+          await Future.delayed(Duration(milliseconds: 600 * (attempt + 1)));
+        }
+      }
+      throw last is DioException ? _dioMessage(last) : 'Download failed';
+    }
+
+    final sink = part.openWrite(mode: FileMode.append);
+    try {
+      if (item.segDone == 0 && media.init != null) {
+        final b = await fetch(media.init!);
+        sink.add(b);
+        item.downloaded += b.length;
+      }
+      final segs = media.segments;
+      const window = 6;
+      final inflight = <int, Future<List<int>>>{};
+      var next = item.segDone;
+      void fill() {
+        while (inflight.length < window && next < segs.length) {
+          final i = next++;
+          final f = fetch(segs[i]);
+          f.ignore(); // errors are handled when awaited in order
+          inflight[i] = f;
+        }
+      }
+
+      fill();
+      for (var i = item.segDone; i < segs.length; i++) {
+        final bytes = await inflight.remove(i)!;
+        sink.add(bytes);
+        item.downloaded += bytes.length;
+        item.segDone = i + 1;
+        // estimate the total so the progress bar and ETA work
+        item.total = (item.downloaded / item.segDone * segs.length).round();
+        fill();
+      }
+      await sink.flush();
+    } finally {
+      await sink.close();
+    }
+
+    item.total = item.downloaded;
+    // fMP4 / audio streams get a fitting extension instead of .ts
+    final first = media.segments.first.path.toLowerCase();
+    String? ext;
+    if (first.endsWith('.aac')) {
+      ext = 'aac';
+    } else if (first.endsWith('.mp3')) {
+      ext = 'mp3';
+    } else if (media.init != null ||
+        first.endsWith('.m4s') ||
+        first.endsWith('.mp4')) {
+      ext = 'mp4';
+    }
+    final out0 = item.savePath;
+    if (ext != null && item.fileName.toLowerCase().endsWith('.ts')) {
+      final nn = '${item.fileName.substring(0, item.fileName.length - 3)}.$ext';
+      if (!File('${item.dirPath}/$nn').existsSync()) {
+        final tmp = File(out0);
+        if (await tmp.exists()) await tmp.delete();
+        final target = '${item.dirPath}/$nn';
+        await part.rename(target);
+        item.fileName = nn;
+        return;
+      }
+    }
+    final out = File(out0);
+    if (await out.exists()) await out.delete();
+    await part.rename(out0);
+  }
+
   Future<void> _singleStream(DownloadItem item, _Run run) async {
     final part = File(_partPath(item, 0));
     if (await part.exists()) await part.delete(); // cannot resume a single stream
@@ -623,6 +794,10 @@ class DownloadManager extends ChangeNotifier {
   Future<ProbeResult> inspect(String url,
       {Map<String, String>? headers}) async {
     if (isUnsupportedHost(url)) throw unsupportedMessage;
+    if (_looksHls(url, null)) {
+      return const ProbeResult(-1, true, null, 'application/vnd.apple.mpegurl',
+          hls: true);
+    }
     final token = CancelToken();
     try {
       final resp = await _dio.get<ResponseBody>(
@@ -650,6 +825,10 @@ class DownloadManager extends ChangeNotifier {
       final name = _nameFromDisposition(h.value('content-disposition'));
       final type = h.value('content-type');
       token.cancel('probe done');
+      if (_looksHls(url, type)) {
+        return const ProbeResult(-1, true, null, 'application/vnd.apple.mpegurl',
+            hls: true);
+      }
       return ProbeResult(total, range && total > 0, name, type);
     } on DioException catch (e) {
       throw _dioMessage(e);

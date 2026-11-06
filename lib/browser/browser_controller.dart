@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../download_manager.dart';
+import '../hls.dart';
 import 'browser_tab.dart';
 
 class Shortcut {
@@ -94,7 +96,10 @@ class BrowserController extends ChangeNotifier {
   Future<void> init() async {
     final p = _prefs = await SharedPreferences.getInstance();
     blockAds = p.getBool('b_blockAds') ?? false;
-    captureMedia = p.getBool('b_capture') ?? false;
+    // capturing is on by default now (key renamed so old 'off' is not kept)
+    captureMedia = p.getBool('b_capture2') ?? true;
+    bubbleX = p.getDouble('b_bx') ?? 1.0;
+    bubbleY = p.getDouble('b_by') ?? 0.72;
     desktopMode = p.getBool('b_desktop') ?? false;
     themeMode = ThemeMode.values.firstWhere(
       (m) => m.name == p.getString('b_theme'),
@@ -160,7 +165,7 @@ class BrowserController extends ChangeNotifier {
     final p = _prefs;
     if (p == null) return;
     await p.setBool('b_blockAds', blockAds);
-    await p.setBool('b_capture', captureMedia);
+    await p.setBool('b_capture2', captureMedia);
     await p.setBool('b_desktop', desktopMode);
     await p.setString('b_theme', themeMode.name);
     await p.setString(
@@ -380,7 +385,7 @@ class BrowserController extends ChangeNotifier {
     captureMedia = v;
     if (!v) {
       for (final t in tabs) {
-        t.mediaUrls.clear();
+        t.media.clear();
       }
     }
     notifyListeners();
@@ -509,12 +514,16 @@ class BrowserController extends ChangeNotifier {
 
   // -------------------------------------------------------------- media
 
-  static const _mediaExt = {
-    'mp4', 'webm', 'mkv', 'mov', '3gp', 'mp3', 'm4a', 'aac', 'ogg', 'wav',
-    'flac',
-  };
+  static const _audioExt = {'mp3', 'm4a', 'aac', 'ogg', 'wav', 'flac', 'opus'};
+  static const _videoExt = {'mp4', 'webm', 'mkv', 'mov', '3gp', 'm4v'};
 
-  /// Direct media file URLs only. Streaming sites (YouTube etc.) are skipped.
+  static String _extOf(String url) {
+    final u = Uri.tryParse(url);
+    final last = (u != null && u.pathSegments.isNotEmpty) ? u.pathSegments.last : '';
+    return last.contains('.') ? last.split('.').last.toLowerCase() : '';
+  }
+
+  /// Direct media files and HLS streams. YouTube and similar are skipped.
   bool isCapturableMedia(String url, {bool fromMediaElement = false}) {
     final u = Uri.tryParse(url);
     if (u == null || !(u.scheme == 'http' || u.scheme == 'https')) {
@@ -526,16 +535,108 @@ class BrowserController extends ChangeNotifier {
         h.endsWith('youtu.be')) {
       return false;
     }
-    final last = u.pathSegments.isNotEmpty ? u.pathSegments.last : '';
-    final ext = last.contains('.') ? last.split('.').last.toLowerCase() : '';
-    if (ext == 'm3u8' || ext == 'mpd') return false; // adaptive streams
-    return _mediaExt.contains(ext) || fromMediaElement;
+    final ext = _extOf(url);
+    if (ext == 'mpd') return false; // DASH is not supported
+    return ext == 'm3u8' ||
+        _audioExt.contains(ext) ||
+        _videoExt.contains(ext) ||
+        fromMediaElement;
   }
 
-  void addMedia(BrowserTab t, String url) {
+  /// Headers a site expects for its media (page as referer, cookies).
+  Future<Map<String, String>> pageHeaders(BrowserTab t, String url) async {
+    final h = <String, String>{};
+    if (t.url.startsWith('http')) h['Referer'] = t.url;
+    try {
+      final cookies = await CookieManager.instance().getCookies(url: WebUri(url));
+      if (cookies.isNotEmpty) {
+        h['Cookie'] = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+      }
+    } catch (_) {}
+    return h;
+  }
+
+  /// A media URL was seen on [t]. [element] = 'video' / 'audio' when it comes
+  /// from a player on the page; [height] is the picture height if known.
+  void addMedia(BrowserTab t, String url,
+      {String? element, int height = 0, String label = ''}) {
     if (!captureMedia) return;
-    if (t.mediaUrls.contains(url)) return;
-    t.mediaUrls.add(url);
+    if (!isCapturableMedia(url, fromMediaElement: element != null)) return;
+    final ext = _extOf(url);
+    final existing = t.media.where((e) => e.url == url).firstOrNull;
+    if (existing != null) {
+      if (height > 0 && existing.height == 0) {
+        existing.height = height;
+        t.update(() {});
+      }
+      return;
+    }
+    if (ext == 'm3u8') {
+      _addHls(t, url);
+      return;
+    }
+    final audio = element == 'audio' || _audioExt.contains(ext);
+    t.media.add(MediaEntry(url, audio: audio, height: height, label: label));
     t.update(() {});
+  }
+
+  Future<void> _addHls(BrowserTab t, String url) async {
+    // reserve the URL so it is looked at only once
+    final marker = MediaEntry(url, hls: true, live: true);
+    t.media.add(marker);
+    try {
+      final dm = DownloadManager.instance;
+      final headers = await pageHeaders(t, url);
+      final text = await dm.fetchText(url, headers: headers);
+      final base = Uri.parse(url);
+      t.media.remove(marker);
+      if (isMasterPlaylist(text)) {
+        final m = parseMaster(text, base);
+        for (final v in m.variants) {
+          if (t.media.any((e) => e.url == v.url.toString())) continue;
+          t.media.add(MediaEntry(v.url.toString(),
+              hls: true,
+              height: v.height,
+              bandwidth: v.bandwidth,
+              separateAudio: v.separateAudio));
+        }
+        for (final a in m.audios) {
+          if (t.media.any((e) => e.url == a.url.toString())) continue;
+          t.media.add(MediaEntry(a.url.toString(),
+              hls: true, audio: true, label: a.name));
+        }
+      } else {
+        final m = parseMedia(text, base);
+        if (m.segments.isEmpty) {
+          t.update(() {});
+          return;
+        }
+        t.media.add(MediaEntry(url,
+            hls: true,
+            seconds: m.seconds,
+            encrypted: m.encrypted,
+            live: m.live,
+            audio: m.init == null &&
+                (m.segments.first.path.toLowerCase().endsWith('.aac') ||
+                    m.segments.first.path.toLowerCase().endsWith('.mp3'))));
+      }
+    } catch (_) {
+      t.media.remove(marker);
+    }
+    t.update(() {});
+  }
+
+  // --- floating media button: where the user left it (0..1 of the page area)
+  double bubbleX = 1.0;
+  double bubbleY = 0.72;
+
+  Future<void> setBubble(double x, double y) async {
+    bubbleX = x.clamp(0.0, 1.0);
+    bubbleY = y.clamp(0.0, 1.0);
+    try {
+      final p = _prefs;
+      await p?.setDouble('b_bx', bubbleX);
+      await p?.setDouble('b_by', bubbleY);
+    } catch (_) {}
   }
 }

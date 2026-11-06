@@ -243,7 +243,9 @@ class _PromptSheetState extends State<_PromptSheet> {
             'Download mode',
             info == null
                 ? tr('checking…')
-                : (info.range
+                : (info.hls
+                    ? tr('Video stream · saved in pieces, resumable')
+                    : info.range
                     ? tr('Fast multi-part · resumable')
                     : tr('Single stream · no resume')),
           ),

@@ -6,6 +6,7 @@ import 'browser_controller.dart';
 import 'browser_menu.dart';
 import 'browser_tab.dart';
 import 'download_prompt.dart';
+import 'media_ui.dart';
 import 'sheets.dart';
 import 'tab_view.dart';
 import 'tabs_drawer.dart';
@@ -197,7 +198,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     final t = browser.current;
     final cs = Theme.of(context).colorScheme;
     final showMedia =
-        browser.captureMedia && !t.showHome && t.mediaUrls.isNotEmpty;
+        browser.captureMedia && !t.showHome && t.media.isNotEmpty;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -259,15 +260,14 @@ class _BrowserScreenState extends State<BrowserScreen> {
             ],
           ),
           if (showMedia)
-            Positioned(
-              right: 16,
-              bottom: _findVisible ? 80 : 20,
-              child: FloatingActionButton.extended(
-                heroTag: 'media_fab',
-                onPressed: () =>
-                    showMediaSheet(context, t, _handleDownload),
-                icon: const Icon(Icons.graphic_eq_rounded),
-                label: Text('${t.mediaUrls.length} media'),
+            Positioned.fill(
+              // keep clear of the find bar when it is open
+              bottom: _findVisible ? 64 : 0,
+              child: MediaBubble(
+                key: ValueKey('bubble_${t.id}'),
+                browser: browser,
+                tab: t,
+                onDownload: _handleDownload,
               ),
             ),
         ],

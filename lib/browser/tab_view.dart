@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -130,7 +131,22 @@ class _WebHostState extends State<_WebHost> {
           : null,
       initialSettings: browser.webSettings(),
       findInteractionController: tab.findController,
-      onWebViewCreated: (c) => tab.controller = c,
+      initialUserScripts: UnmodifiableListView<UserScript>([
+        UserScript(
+          source: _hookJs,
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        ),
+      ]),
+      onWebViewCreated: (c) {
+        tab.controller = c;
+        c.addJavaScriptHandler(
+          handlerName: 'drom_media',
+          callback: (args) {
+            if (browser.captureMedia && args.isNotEmpty) _takeMedia(args.first);
+            return null;
+          },
+        );
+      },
       onLoadStart: (c, url) {
         if (url != null) tab.setUrl(url.toString());
         tab.update(() {
@@ -138,7 +154,7 @@ class _WebHostState extends State<_WebHost> {
           tab.progress = 5;
           tab.error = null;
           tab.resources.clear();
-          tab.mediaUrls.clear();
+          tab.media.clear();
         });
       },
       onProgressChanged: (c, p) {
@@ -170,7 +186,10 @@ class _WebHostState extends State<_WebHost> {
         await browser.refreshNavState(tab);
         browser.addHistory(tab);
         browser.saveTabs();
-        if (browser.captureMedia) _scanMedia(c);
+        if (browser.captureMedia) {
+          _scanMedia(c);
+          _scanLater(c);
+        }
       },
       onReceivedError: (c, request, error) {
         if (!(request.isForMainFrame ?? false)) return;
@@ -229,26 +248,72 @@ class _WebHostState extends State<_WebHost> {
     );
   }
 
-  Future<void> _scanMedia(InAppWebViewController c) async {
-    try {
-      final res = await c.evaluateJavascript(source: '''
+  // Reads every <video>/<audio> (and their <source> tags) on the page, with
+  // the picture height when the page tells it.
+  static const _scanJs = '''
 (function(){
   var out=[];
-  document.querySelectorAll('video,audio,source').forEach(function(e){
-    var s=e.currentSrc||e.src; if(s) out.push(s);
+  function num(x){var n=parseInt((x||'').toString().replace(/[^0-9]/g,''));return n>0&&n<10000?n:0;}
+  document.querySelectorAll('video,audio').forEach(function(e){
+    var k=e.tagName.toLowerCase();
+    var s=e.currentSrc||e.src;
+    if(s) out.push({u:s,k:k,h:e.videoHeight||0});
+    e.querySelectorAll('source').forEach(function(x){
+      if(x.src) out.push({u:x.src,k:k,h:num(x.getAttribute('size')||x.getAttribute('res')||x.getAttribute('data-res')||x.getAttribute('label')||x.getAttribute('title'))});
+    });
   });
   return out;
 })()
-''');
+''';
+
+  // Tells Flutter as soon as a player starts, so the media button shows up
+  // at once (not only after the page finished loading).
+  static const _hookJs = '''
+(function(){
+  if(window.__dromHook) return; window.__dromHook=true;
+  function send(e){
+    try{
+      var v=e.target; if(!v||!v.tagName) return;
+      var k=v.tagName.toLowerCase(); if(k!=='video'&&k!=='audio') return;
+      var s=v.currentSrc||v.src; if(!s) return;
+      window.flutter_inappwebview.callHandler('drom_media',{u:s,k:k,h:v.videoHeight||0});
+    }catch(x){}
+  }
+  ['play','playing','loadedmetadata','loadeddata'].forEach(function(n){
+    document.addEventListener(n,send,true);
+  });
+})();
+''';
+
+  void _takeMedia(dynamic e) {
+    if (e is! Map) return;
+    final u = e['u'];
+    if (u is! String || u.isEmpty) return;
+    final k = e['k'] == 'audio' ? 'audio' : 'video';
+    final h = (e['h'] is num) ? (e['h'] as num).toInt() : 0;
+    browser.addMedia(tab, u, element: k, height: h);
+  }
+
+  Future<void> _scanMedia(InAppWebViewController c) async {
+    try {
+      final res = await c.evaluateJavascript(source: _scanJs);
       if (res is List) {
-        for (final s in res) {
-          if (s is String &&
-              browser.isCapturableMedia(s, fromMediaElement: true)) {
-            browser.addMedia(tab, s);
-          }
+        for (final e in res) {
+          _takeMedia(e);
         }
       }
     } catch (_) {}
+  }
+
+  /// Players often start late: look again a few times after the page loads.
+  void _scanLater(InAppWebViewController c) {
+    for (final s in const [2, 6, 14]) {
+      Future.delayed(Duration(seconds: s), () {
+        if (mounted && browser.captureMedia && tab.controller == c) {
+          _scanMedia(c);
+        }
+      });
+    }
   }
 
   @override

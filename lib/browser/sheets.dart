@@ -30,27 +30,6 @@ Future<void> showResourcesSheet(
 }
 
 /// Lists direct audio/video files found on the page ("Capture Audio/Video").
-Future<void> showMediaSheet(
-  BuildContext context,
-  BrowserTab tab,
-  void Function(DownloadRequest) onDownload,
-) {
-  return showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    showDragHandle: true,
-    builder: (ctx) => _UrlListSheet(
-      title: 'Audio / video on this page',
-      emptyText: 'No direct media files found on this page.',
-      entries: [for (final u in tab.mediaUrls) (u, 'media')],
-      onDownload: (u) {
-        Navigator.pop(ctx);
-        onDownload(DownloadRequest(url: u, referer: tab.url));
-      },
-    ),
-  );
-}
-
 class _UrlListSheet extends StatefulWidget {
   final String title;
   final String emptyText;
