@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 
 import '../download_manager.dart';
@@ -25,8 +27,8 @@ class MediaBubble extends StatefulWidget {
 }
 
 class _MediaBubbleState extends State<MediaBubble> {
-  static const double _w = 36;
-  static const double _h = 64;
+  static const double _w = 70;
+  static const double _h = 34;
   Offset? _drag; // pixel position while dragging
 
   @override
@@ -35,7 +37,6 @@ class _MediaBubbleState extends State<MediaBubble> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tab = widget.tab;
     final n = tab.media.length;
-    final bg = dark ? const Color(0xFF2B3649) : const Color(0xFFF1F5FF);
     return LayoutBuilder(builder: (context, box) {
       final maxX = (box.maxWidth - _w).clamp(0.0, double.infinity);
       final maxY = (box.maxHeight - _h).clamp(0.0, double.infinity);
@@ -72,33 +73,55 @@ class _MediaBubbleState extends State<MediaBubble> {
                 duration: const Duration(milliseconds: 420),
                 curve: Curves.easeOutBack,
                 builder: (_, v, child) => Transform.scale(scale: v, child: child),
-                child: Material(
-                  elevation: _drag != null ? 8 : 3,
-                  color: bg,
-                  shadowColor: Colors.black38,
-                  borderRadius: BorderRadius.circular(_w / 2),
-                  child: Container(
-                    width: _w,
-                    height: _h,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(_w / 2),
-                      border: Border.all(
-                          color: cs.primary.withValues(alpha: 0.35)),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.download_rounded,
-                            color: cs.primary, size: 20),
-                        if (n > 1) ...[
-                          const SizedBox(height: 3),
-                          Text('$n',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: cs.primary)),
-                        ],
-                      ],
+                // glass: see-through, frosted, so the page stays visible
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(_h / 2),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          blurRadius: _drag != null ? 14 : 8,
+                          offset: const Offset(0, 3)),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_h / 2),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        width: _w,
+                        height: _h,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(_h / 2),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: dark ? 0.22 : 0.55),
+                              Colors.white.withValues(alpha: dark ? 0.08 : 0.25),
+                            ],
+                          ),
+                          border: Border.all(
+                              color: Colors.white
+                                  .withValues(alpha: dark ? 0.35 : 0.8)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.download_rounded,
+                                color: dark ? Colors.white : cs.primary,
+                                size: 20),
+                            if (n > 1) ...[
+                              const SizedBox(width: 4),
+                              Text('$n',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: dark ? Colors.white : cs.primary)),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ),
