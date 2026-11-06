@@ -1,6 +1,11 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// GitHub repository that publishes DROM builds as Releases.
 const String kRepo = 'sabbirahmed77708-sudo/FastGet';
@@ -20,6 +25,8 @@ class UpdateInfo {
   });
 }
 
+enum UpdatePhase { idle, downloading, ready, error }
+
 /// Looks for a newer DROM build in the GitHub Releases of [kRepo].
 ///
 /// The CI publishes every build as a release tagged `build-<number>`; the app
@@ -37,6 +44,120 @@ class UpdateChecker extends ChangeNotifier {
   int build = 0;
 
   bool get hasUpdate => available != null;
+
+  // ---- in-app update: download, then open the installer
+  UpdatePhase phase = UpdatePhase.idle;
+  int received = 0;
+  int totalBytes = 0;
+  String? updateError;
+  String? _apkPath;
+  CancelToken? _token;
+
+  /// Build number the "update available" pop-up was already shown for.
+  int promptedBuild = 0;
+
+  double get progress =>
+      totalBytes > 0 ? (received / totalBytes).clamp(0.0, 1.0).toDouble() : 0;
+
+  /// Downloads the new APK inside DROM and opens the installer when done.
+  Future<void> startUpdate() async {
+    final info = available;
+    if (info == null || phase == UpdatePhase.downloading) return;
+    phase = UpdatePhase.downloading;
+    received = 0;
+    totalBytes = info.size;
+    updateError = null;
+    notifyListeners();
+    final token = _token = CancelToken();
+    try {
+      final dir = await getTemporaryDirectory();
+      // old update files are not needed any more
+      for (final f in dir.listSync()) {
+        if (f is File && f.path.contains('DROM-update-')) {
+          try {
+            f.deleteSync();
+          } catch (_) {}
+        }
+      }
+      final path = '${dir.path}/DROM-update-${info.build}.apk';
+      final tmp = '$path.part';
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 60),
+        followRedirects: true,
+        maxRedirects: 8,
+        headers: {'User-Agent': 'DROM-app'},
+      ));
+      var tick = DateTime.now();
+      await dio.download(
+        info.apkUrl,
+        tmp,
+        cancelToken: token,
+        onReceiveProgress: (r, t) {
+          received = r;
+          if (t > 0) totalBytes = t;
+          final now = DateTime.now();
+          if (now.difference(tick).inMilliseconds > 150) {
+            tick = now;
+            notifyListeners();
+          }
+        },
+      );
+      final f = File(tmp);
+      if (info.size > 0 && await f.length() != info.size) {
+        await f.delete();
+        throw 'Update download incomplete';
+      }
+      await f.rename(path);
+      _apkPath = path;
+      phase = UpdatePhase.ready;
+      notifyListeners();
+      await install();
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        phase = UpdatePhase.idle;
+      } else {
+        phase = UpdatePhase.error;
+        updateError = 'Update download failed. Check your internet and try again.';
+      }
+      notifyListeners();
+    } catch (e) {
+      phase = UpdatePhase.error;
+      updateError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  void cancelUpdate() {
+    _token?.cancel('cancelled');
+  }
+
+  /// Opens Android's installer for the downloaded APK.
+  Future<void> install() async {
+    final path = _apkPath;
+    if (path == null || !File(path).existsSync()) {
+      phase = UpdatePhase.idle;
+      notifyListeners();
+      return;
+    }
+    try {
+      if (!await Permission.requestInstallPackages.isGranted) {
+        // opens "Install unknown apps" for DROM, once
+        await Permission.requestInstallPackages.request();
+      }
+      final r = await OpenFilex.open(path,
+          type: 'application/vnd.android.package-archive');
+      if (r.type != ResultType.done) {
+        phase = UpdatePhase.error;
+        updateError = 'Could not open the installer. Allow "Install unknown apps" for DROM.';
+        notifyListeners();
+      }
+    } catch (_) {
+      phase = UpdatePhase.error;
+      updateError = 'Could not open the installer.';
+      notifyListeners();
+    }
+  }
 
   Future<void> loadVersion() async {
     if (version.isNotEmpty) return;

@@ -7,8 +7,9 @@ import 'browser_controller.dart';
 import 'browser_tab.dart';
 import 'download_prompt.dart';
 
-/// Small floating box that appears when the page has audio / video.
-/// Drag it anywhere; tap it to choose what to download.
+/// Small floating column that appears when the page has audio / video. It
+/// shows the full name of what was found. Drag it anywhere; tap it to choose
+/// what to download.
 class MediaBubble extends StatefulWidget {
   final BrowserController browser;
   final BrowserTab tab;
@@ -25,17 +26,51 @@ class MediaBubble extends StatefulWidget {
 }
 
 class _MediaBubbleState extends State<MediaBubble> {
-  static const double _size = 58;
+  static const double _w = 156;
+  static const double _h = 118; // rough height, only used to keep it on screen
   Offset? _drag; // pixel position while dragging
+
+  /// Best thing found: highest quality video, else audio.
+  MediaEntry? _best() {
+    final l = widget.tab.media.where((e) => e.downloadable).toList();
+    if (l.isEmpty) return null;
+    l.sort((a, b) {
+      if (a.audio != b.audio) return a.audio ? 1 : -1;
+      final h = b.height.compareTo(a.height);
+      return h != 0 ? h : b.bandwidth.compareTo(a.bandwidth);
+    });
+    return l.first;
+  }
+
+  String _name(MediaEntry? e) {
+    final t = widget.tab.title.trim();
+    if (t.isNotEmpty) return t;
+    if (e != null) {
+      final last = Uri.tryParse(e.url)?.pathSegments.lastOrNull ?? '';
+      try {
+        if (last.isNotEmpty) return Uri.decodeComponent(last);
+      } catch (_) {}
+    }
+    return widget.tab.host;
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final tab = widget.tab;
+    final best = _best();
     final audioOnly = tab.media.isNotEmpty && tab.media.every((e) => e.audio);
+    final n = tab.media.length;
+    final more = n > 1 ? '  +${n - 1}' : '';
+    final info = best == null
+        ? ''
+        : '${_qualityName(best)} · ${best.hls ? 'HLS' : best.ext.toUpperCase()}$more';
+    final bg = dark ? const Color(0xFF263042) : const Color(0xFFEFF4FF);
+    final fg = dark ? Colors.white : const Color(0xFF1B2A4A);
     return LayoutBuilder(builder: (context, box) {
-      final maxX = (box.maxWidth - _size).clamp(0.0, double.infinity);
-      final maxY = (box.maxHeight - _size).clamp(0.0, double.infinity);
+      final maxX = (box.maxWidth - _w).clamp(0.0, double.infinity);
+      final maxY = (box.maxHeight - _h).clamp(0.0, double.infinity);
       final b = widget.browser;
       final rest = Offset(b.bubbleX * maxX, b.bubbleY * maxY);
       final pos = _drag ?? rest;
@@ -63,62 +98,80 @@ class _MediaBubbleState extends State<MediaBubble> {
               },
               onTap: () => showMediaSheet(context, tab, widget.onDownload),
               child: TweenAnimationBuilder<double>(
-                // a bounce every time a new item is found
-                key: ValueKey('bubble_${tab.media.length}'),
-                tween: Tween(begin: 0.6, end: 1),
-                duration: const Duration(milliseconds: 520),
-                curve: Curves.elasticOut,
+                // a small bounce every time a new item is found
+                key: ValueKey('bubble_$n'),
+                tween: Tween(begin: 0.85, end: 1),
+                duration: const Duration(milliseconds: 420),
+                curve: Curves.easeOutBack,
                 builder: (_, v, child) => Transform.scale(scale: v, child: child),
                 child: Material(
-                  elevation: _drag != null ? 10 : 6,
-                  color: Colors.transparent,
-                  shadowColor: Colors.black54,
-                  borderRadius: BorderRadius.circular(18),
+                  elevation: _drag != null ? 8 : 3,
+                  color: bg,
+                  shadowColor: Colors.black38,
+                  borderRadius: BorderRadius.circular(16),
                   child: Container(
-                    width: _size,
-                    height: _size,
+                    width: _w,
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: LinearGradient(
-                        colors: [
-                          cs.primary,
-                          Color.lerp(cs.primary, Colors.indigo, 0.6)!,
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
+                      borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.35)),
+                          color: cs.primary.withValues(alpha: 0.35)),
                     ),
-                    child: Stack(
-                      alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          audioOnly
-                              ? Icons.graphic_eq_rounded
-                              : Icons.download_for_offline_rounded,
-                          color: cs.onPrimary,
-                          size: 30,
-                        ),
-                        Positioned(
-                          right: 4,
-                          top: 4,
-                          child: Container(
+                        Row(children: [
+                          Icon(
+                            audioOnly
+                                ? Icons.graphic_eq_rounded
+                                : Icons.download_for_offline_rounded,
+                            color: cs.primary,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(tr('Tap to download'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: fg.withValues(alpha: 0.65))),
+                          ),
+                          Container(
                             constraints: const BoxConstraints(minWidth: 18),
                             height: 18,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            padding: const EdgeInsets.symmetric(horizontal: 5),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEF4444),
+                              color: cs.primary,
                               borderRadius: BorderRadius.circular(9),
                             ),
-                            child: Text('${tab.media.length}',
-                                style: const TextStyle(
-                                    color: Colors.white,
+                            child: Text('$n',
+                                style: TextStyle(
+                                    color: cs.onPrimary,
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700)),
                           ),
-                        ),
+                        ]),
+                        const SizedBox(height: 6),
+                        // the full name, so it is clear what will be downloaded
+                        Text(_name(best),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12.5,
+                                height: 1.25,
+                                fontWeight: FontWeight.w600,
+                                color: fg)),
+                        if (info.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(info,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.primary)),
+                        ],
                       ],
                     ),
                   ),
@@ -129,6 +182,15 @@ class _MediaBubbleState extends State<MediaBubble> {
         ],
       );
     });
+  }
+}
+
+String _urlName(String url) {
+  final last = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
+  try {
+    return Uri.decodeComponent(last);
+  } catch (_) {
+    return last;
   }
 }
 
@@ -435,12 +497,16 @@ class _MediaRowState extends State<_MediaRow> {
         ],
       ]),
       subtitle: Text(
-        note != null ? '${_detail()}\n${tr(note)}' : _detail(),
+        [
+          widget.tab.title.isNotEmpty ? widget.tab.title : _urlName(e.url),
+          _detail(),
+          if (note != null) tr(note),
+        ].join('\n'),
         style: TextStyle(
             color: (e.encrypted || e.live) ? cs.error : cs.onSurfaceVariant,
             fontSize: 12.5),
       ),
-      isThreeLine: note != null,
+      isThreeLine: true,
       trailing: e.downloadable
           ? IconButton.filledTonal(
               tooltip: tr('Download'),

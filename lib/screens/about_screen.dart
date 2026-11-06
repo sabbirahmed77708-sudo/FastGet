@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../download_manager.dart';
 import '../l10n.dart';
 import '../models.dart';
+import '../update_ui.dart';
 import '../updater.dart';
 
 /// About DROM: logo, version and "Check for update".
@@ -15,40 +15,12 @@ class AboutScreen extends StatefulWidget {
 
 class _AboutScreenState extends State<AboutScreen> {
   final up = UpdateChecker.instance;
-  bool _adding = false;
 
   @override
   void initState() {
     super.initState();
     up.loadVersion();
     if (!up.checkedOnce) up.check();
-  }
-
-  Future<void> _downloadUpdate(UpdateInfo info) async {
-    setState(() => _adding = true);
-    try {
-      await DownloadManager.instance
-          .addUrl(info.apkUrl, suggestedName: 'DROM-build-${info.build}.apk');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: const T(
-            'Update added to downloads. Open it when it finishes to install.'),
-        action: SnackBarAction(
-          label: tr('View'),
-          onPressed: () =>
-              Navigator.of(context).popUntil((route) => route.isFirst),
-        ),
-      ));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        behavior: SnackBarBehavior.floating,
-        content: Text(tr(e.toString())),
-      ));
-    } finally {
-      if (mounted) setState(() => _adding = false);
-    }
   }
 
   @override
@@ -146,19 +118,7 @@ class _AboutScreenState extends State<AboutScreen> {
             Text(notes, style: const TextStyle(fontSize: 13, height: 1.4)),
           ],
           const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _adding ? null : () => _downloadUpdate(info),
-              icon: _adding
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.download_rounded),
-              label: const T('Download update'),
-            ),
-          ),
+          const UpdateActionButton(),
         ],
       );
     } else if (up.error != null) {

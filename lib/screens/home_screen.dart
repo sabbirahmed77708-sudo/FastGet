@@ -7,6 +7,7 @@ import '../browser/download_prompt.dart';
 import '../download_manager.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../update_ui.dart';
 import '../updater.dart';
 import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
@@ -37,6 +38,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     dm.addListener(_rebuild);
     UpdateChecker.instance.addListener(_rebuild);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !widget.embedded) maybePromptUpdate(context);
+    });
   }
 
   @override
@@ -47,7 +51,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _rebuild() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    if (!widget.embedded && UpdateChecker.instance.hasUpdate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) {
+          maybePromptUpdate(context);
+        }
+      });
+    }
   }
 
   Future<void> _refresh() async {
@@ -449,6 +461,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          const UpdateBanner(),
           _summary(),
           _filters(),
           Expanded(
