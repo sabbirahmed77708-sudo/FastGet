@@ -66,6 +66,10 @@ class _Run {
   List<int> segBytes = [];
   int startBytes = 0;
   int nextFree = 0; // speed limit pacing (microseconds)
+
+  /// Set when the download itself failed and the other pieces were stopped
+  /// (as opposed to the person pausing / removing it).
+  bool failed = false;
 }
 
 class DownloadManager extends ChangeNotifier {
@@ -112,6 +116,9 @@ class DownloadManager extends ChangeNotifier {
   bool sortByType = true;
 
   final Set<String> _waitingForNet = {};
+
+  /// Resume was asked while the cancelled run was still shutting down.
+  final Set<String> _startAfterStop = {};
   final Map<String, int> _retryAt = {};
   final Map<String, int> _failStreak = {};
   int _offlineTicks = 0;
@@ -247,7 +254,11 @@ class DownloadManager extends ChangeNotifier {
       _offlineTicks = 0;
       return;
     }
-    final online = await _hasInternet();
+    // bytes are arriving right now: the internet is clearly there, whatever
+    // the test servers say
+    final flowing = items.any(
+        (e) => e.status == DlStatus.downloading && e.speed > 0);
+    final online = flowing || await _hasInternet();
     if (!online) {
       if (running && ++_offlineTicks >= 2) {
         for (final it
@@ -457,7 +468,13 @@ class DownloadManager extends ChangeNotifier {
   // ------------------------------------------------------------- control
 
   void start(DownloadItem item) {
-    if (_runs.containsKey(item.id)) return;
+    final live = _runs[item.id];
+    if (live != null) {
+      // paused a moment ago and resumed at once: the old run is still
+      // stopping, so start again as soon as it is gone
+      if (live.token.isCancelled) _startAfterStop.add(item.id);
+      return;
+    }
     _waitingForNet.remove(item.id);
     if (item.status == DlStatus.completed) return;
     if (wifiOnly) {
@@ -501,12 +518,7 @@ class DownloadManager extends ChangeNotifier {
 
   Future<void> _wifiTick() async {
     if (!wifiOnly) {
-      if (_waitingForWifi.isEmpty) return;
-      final ids = _waitingForWifi.toList();
-      _waitingForWifi.clear();
-      for (final it in items.where((e) => ids.contains(e.id))) {
-        _begin(it);
-      }
+      _resumeWifiWaiters();
       return;
     }
     final wifi = await _onWifi();
@@ -514,15 +526,21 @@ class DownloadManager extends ChangeNotifier {
       for (final it in items
           .where((e) => e.status == DlStatus.downloading)
           .toList()) {
-        _waitingForWifi.add(it.id);
         pause(it);
+        _waitingForWifi.add(it.id); // after pause(), which clears it
       }
-    } else if (_waitingForWifi.isNotEmpty) {
-      final ids = _waitingForWifi.toList();
-      _waitingForWifi.clear();
-      for (final it in items.where((e) => ids.contains(e.id))) {
-        _begin(it);
-      }
+    } else {
+      _resumeWifiWaiters();
+    }
+  }
+
+  /// Starts the downloads that were waiting for Wi-Fi.
+  void _resumeWifiWaiters() {
+    if (_waitingForWifi.isEmpty) return;
+    final ids = _waitingForWifi.toList();
+    _waitingForWifi.clear();
+    for (final it in items.where((e) => ids.contains(e.id))) {
+      if (it.status == DlStatus.paused) start(it);
     }
   }
 
@@ -569,6 +587,7 @@ class DownloadManager extends ChangeNotifier {
 
   void pause(DownloadItem item) {
     _waitingForNet.remove(item.id);
+    _waitingForWifi.remove(item.id);
     final run = _runs[item.id];
     item.status = DlStatus.paused;
     item.speed = 0;
@@ -633,6 +652,11 @@ class DownloadManager extends ChangeNotifier {
     for (final it in all) {
       _runs[it.id]?.token.cancel('removed');
       items.remove(it);
+      _waitingForNet.remove(it.id);
+      _waitingForWifi.remove(it.id);
+      _startAfterStop.remove(it.id);
+      _retryAt.remove(it.id);
+      _failStreak.remove(it.id);
     }
     notifyListeners();
     await Future.delayed(const Duration(milliseconds: 300));
@@ -648,21 +672,8 @@ class DownloadManager extends ChangeNotifier {
     await _save();
   }
 
-  Future<void> remove(DownloadItem item, {bool deleteFile = false}) async {
-    final run = _runs[item.id];
-    run?.token.cancel('removed');
-    items.remove(item);
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    await _deleteParts(item);
-    if (deleteFile) {
-      try {
-        final f = File(item.savePath);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-    }
-    await _save();
-  }
+  Future<void> remove(DownloadItem item, {bool deleteFile = false}) =>
+      removeMany([item], deleteFiles: deleteFile);
 
   // ------------------------------------------------------------- engine
 
@@ -703,8 +714,8 @@ class DownloadManager extends ChangeNotifier {
     } catch (e) {
       run.ticker?.cancel();
       item.speed = 0;
-      if (run.token.isCancelled) {
-        // fine
+      if (run.token.isCancelled && !run.failed) {
+        // paused / removed: the status is already set
       } else if (_isTransient(e) && _scheduleRetry(item, run)) {
         // network problem: retried automatically
       } else {
@@ -712,6 +723,8 @@ class DownloadManager extends ChangeNotifier {
         item.error = e.toString();
       }
     } finally {
+      // stop any request of this run that is still open
+      if (!run.token.isCancelled) run.token.cancel('run finished');
       _runs.remove(item.id);
       if (item.status == DlStatus.completed) {
         _failStreak.remove(item.id);
@@ -719,6 +732,11 @@ class DownloadManager extends ChangeNotifier {
       }
       notifyListeners();
       await _save();
+      if (_startAfterStop.remove(item.id) &&
+          items.contains(item) &&
+          item.status == DlStatus.paused) {
+        start(item);
+      }
       _pump(); // a slot is free: start the next queued download
     }
   }
@@ -768,12 +786,31 @@ class DownloadManager extends ChangeNotifier {
     }
     _syncDownloaded(item, run);
 
-    await Future.wait([
-      for (var i = 0; i < kSegments; i++)
-        _downloadSegment(item, run, i, starts[i], ends[i]),
-    ]);
+    // If one piece fails, stop the others at once (and wait for them), so that
+    // nothing keeps writing to the part files while a retry starts over them.
+    await Future.wait(
+      [
+        for (var i = 0; i < kSegments; i++)
+          _downloadSegment(item, run, i, starts[i], ends[i]).catchError(
+            (Object e, StackTrace st) {
+              if (!run.token.isCancelled) {
+                run.failed = true;
+                run.token.cancel('piece failed');
+              }
+              Error.throwWithStackTrace(e, st);
+            },
+          ),
+      ],
+      eagerError: false,
+    );
 
-    await _merge(item);
+    // every piece must be complete before they are joined
+    for (var i = 0; i < kSegments; i++) {
+      if (run.segBytes[i] != ends[i] - starts[i] + 1) {
+        throw const HttpException('Connection closed before the piece was complete');
+      }
+    }
+    await _merge(item, run);
   }
 
   Future<void> _downloadSegment(
@@ -1012,21 +1049,32 @@ class DownloadManager extends ChangeNotifier {
     await part.rename(item.savePath);
   }
 
-  Future<void> _merge(DownloadItem item) async {
+  Future<void> _merge(DownloadItem item, _Run run) async {
     final out = File(item.savePath);
     if (await out.exists()) await out.delete();
     final sink = out.openWrite();
     try {
       for (var i = 0; i < kSegments; i++) {
+        // paused or removed while joining: stop; the pieces are kept
+        if (run.token.isCancelled && !run.failed) {
+          throw DioException(
+              requestOptions: RequestOptions(path: ''),
+              type: DioExceptionType.cancel);
+        }
         final p = File(_partPath(item, i));
         if (await p.exists()) {
           await sink.addStream(p.openRead());
         }
       }
       await sink.flush();
-    } finally {
+    } catch (_) {
       await sink.close();
+      try {
+        await out.delete(); // never leave a half-joined file behind
+      } catch (_) {}
+      rethrow;
     }
+    await sink.close();
     if (item.total > 0 && await out.length() != item.total) {
       try {
         await out.delete();

@@ -13,7 +13,7 @@ import 'download_manager.dart';
 import 'patcher.dart';
 
 /// GitHub repository that publishes SDM builds as Releases.
-const String kRepo = 'sabbirahmed77708-sudo/FastGet';
+const String kRepo = 'sabbirahmed77708-sudo/SDM';
 
 class UpdateInfo {
   final int build;

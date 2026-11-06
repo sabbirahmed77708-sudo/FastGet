@@ -583,6 +583,8 @@ class BrowserController extends ChangeNotifier {
     }
     final audio = element == 'audio' || _audioExt.contains(ext);
     t.media.add(MediaEntry(url, audio: audio, height: height, label: label));
+    // pages that load many small pieces must not grow the list without end
+    if (t.media.length > 80) t.media.removeRange(0, t.media.length - 80);
     t.update(() {});
   }
 

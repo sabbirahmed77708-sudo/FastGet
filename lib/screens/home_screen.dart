@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:open_filex/open_filex.dart';
@@ -275,6 +277,17 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (choice == 'delete') {
       await dm.remove(d, deleteFile: true);
     }
+  }
+
+  /// Opens a finished file; says so when it was deleted or moved.
+  Future<void> _openFile(DownloadItem d) async {
+    if (!File(d.savePath).existsSync()) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          behavior: SnackBarBehavior.floating,
+          content: T('File not found. It may have been deleted or moved.')));
+      return;
+    }
+    await OpenFilex.open(d.savePath);
   }
 
   Future<void> _redownload(DownloadItem d) async {
@@ -700,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(18),
         onTap: _selecting
             ? () => _toggle(d)
-            : (done ? () => OpenFilex.open(d.savePath) : null),
+            : (done ? () => _openFile(d) : null),
         // long-press selects; tap more to select any number, delete together
         onLongPress: () {
           HapticFeedback.mediumImpact();
@@ -755,7 +768,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       tooltip: tr('Open'),
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.open_in_new_rounded),
-                      onPressed: () => OpenFilex.open(d.savePath),
+                      onPressed: () => _openFile(d),
                     )
                   else if (running)
                     IconButton.filledTonal(
