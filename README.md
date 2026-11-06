@@ -1,4 +1,4 @@
-# DROM – ডাউনলোড ম্যানেজার (Flutter)
+# SDM – ডাউনলোড ম্যানেজার (Flutter)
 
 **ফিচার**
 - যেকোনো ফাইল-লিংক থেকে ডাউনলোড (ভিডিও, মিউজিক, zip, apk, pdf ইত্যাদি)
@@ -35,7 +35,7 @@
 
 ## নোট
 - সার্ভার Range সাপোর্ট না করলে সিঙ্গেল স্ট্রিমে নামে (রিজিউম হবে না)।
-- কিছু ফোনে (Xiaomi, Oppo, Vivo, Samsung ইত্যাদি) ব্যাটারি সেভার ব্যাকগ্রাউন্ড অ্যাপ বন্ধ করে দেয়। DROM-এর ব্যাটারি সেটিং "Unrestricted / No restrictions" করে দিন।
+- কিছু ফোনে (Xiaomi, Oppo, Vivo, Samsung ইত্যাদি) ব্যাটারি সেভার ব্যাকগ্রাউন্ড অ্যাপ বন্ধ করে দেয়। SDM-এর ব্যাটারি সেটিং "Unrestricted / No restrictions" করে দিন।
 - কেবল সেই কনটেন্টই ডাউনলোড করুন যা ডাউনলোডের অনুমতি আছে।
 
 ## লোকাল বিল্ড (Flutter SDK থাকলে)
@@ -49,8 +49,8 @@ flutter build apk --release
 ```
 
 ## Share and copy links
-- From any app, use **Share → DROM** on a file link and DROM shows the download prompt.
-- Copy a direct file link, then open DROM: it offers to download it.
+- From any app, use **Share → SDM** on a file link and SDM shows the download prompt.
+- Copy a direct file link, then open SDM: it offers to download it.
 - Every link is checked first; web pages are refused, and YouTube links are not supported.
 
 ## Project layout
@@ -58,4 +58,4 @@ flutter build apk --release
 - `lib/notifier.dart` + `tool/DownloadService.kt.tpl` – notification and foreground service
 - `tool/MainActivity.kt.tpl` – keeps the Flutter engine alive after the app is closed
 - `lib/updater.dart` – update check against GitHub Releases
-- `assets/icon/logo.png` – the DROM logo; `tool/make_icon.py` builds the launcher icons from it
+- `assets/icon/logo.png` – the SDM logo; `tool/make_icon.py` builds the launcher icons from it

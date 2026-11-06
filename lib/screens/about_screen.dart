@@ -5,7 +5,7 @@ import '../models.dart';
 import '../update_ui.dart';
 import '../updater.dart';
 
-/// About DROM: logo, version and "Check for update".
+/// About SDM: logo, version and "Check for update".
 class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
 
@@ -21,7 +21,6 @@ class _AboutScreenState extends State<AboutScreen> {
     super.initState();
     up.loadVersion();
     if (!up.checkedOnce) up.check();
-    up.loadHistory();
   }
 
   @override
@@ -40,12 +39,13 @@ class _AboutScreenState extends State<AboutScreen> {
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
             children: [
               Center(
+                // the app logo exactly as it is (its own rounded corners)
                 child: Image.asset('assets/icon/logo.png',
-                    width: 132, height: 132, filterQuality: FilterQuality.high),
+                    width: 150, fit: BoxFit.contain, filterQuality: FilterQuality.high),
               ),
               const SizedBox(height: 18),
               const Center(
-                child: Text('DROM',
+                child: Text('SDM',
                     style: TextStyle(
                         fontSize: 30,
                         fontWeight: FontWeight.w800,
@@ -74,7 +74,6 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 26),
               _updateCard(cs),
-              const UpdateHistory(),
             ],
           );
         },
@@ -96,9 +95,6 @@ class _AboutScreenState extends State<AboutScreen> {
         const Expanded(child: T('Checking for updates…')),
       ]);
     } else if (info != null) {
-      final notes = info.notes.length > 400
-          ? '${info.notes.substring(0, 400)}…'
-          : info.notes;
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -111,14 +107,12 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
           ]),
           const SizedBox(height: 8),
+          // only how big the update is and when it came out; both go away
+          // once it is installed (the card then says "up to date")
           Text(
-            '${info.name}${updateSizeLabel(info)}${info.published != null ? ' · ${formatReleaseDate(info.published)}' : ''}',
-            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+            updateSummary(info),
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(notes, style: const TextStyle(fontSize: 13, height: 1.4)),
-          ],
           const SizedBox(height: 14),
           const UpdateActionButton(),
         ],

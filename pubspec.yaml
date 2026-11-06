@@ -1,5 +1,5 @@
 name: fastget
-description: DROM - fast multi-segment download manager with pause/resume and a built-in browser.
+description: SDM - fast multi-segment download manager with pause/resume and a built-in browser.
 publish_to: "none"
 version: 1.0.0+1
 

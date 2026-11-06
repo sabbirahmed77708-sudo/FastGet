@@ -103,7 +103,7 @@ class _UrlListSheetState extends State<_UrlListSheet> {
                               const SnackBar(content: T('Link copied')));
                         },
                         trailing: IconButton(
-                          tooltip: tr('Download with DROM'),
+                          tooltip: tr('Download with SDM'),
                           icon: const Icon(Icons.download_rounded),
                           onPressed: () => widget.onDownload(url),
                         ),

@@ -106,6 +106,6 @@ jobs:
           EXTRA=""
           if [ -f patches/DROM.sha256 ]; then EXTRA="$(ls patches/*)"; fi
           gh release create "build-${{ github.run_number }}" DROM.apk $EXTRA \
-            --title "DROM build ${{ github.run_number }}" \
+            --title "SDM build ${{ github.run_number }}" \
             --notes-file notes.txt \
             --latest

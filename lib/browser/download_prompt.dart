@@ -8,7 +8,7 @@ import '../models.dart';
 import '../theme.dart';
 import '../l10n.dart';
 
-/// A download the browser wants to hand over to DROM.
+/// A download the browser wants to hand over to SDM.
 class DownloadRequest {
   final String url;
   final String? fileName;
@@ -49,14 +49,14 @@ String _typeLabel(String name, String? mime) {
 
 /// Quick save locations shown as chips in the popup.
 const List<(String, String)> _quickFolders = [
-  ('DROM folder', '$kStorageRoot/Download/FastGet'),
+  ('SDM folder', '$kStorageRoot/Download/FastGet'),
   ('Downloads', '$kStorageRoot/Download'),
   ('Movies', '$kStorageRoot/Movies'),
   ('Music', '$kStorageRoot/Music'),
   ('Documents', '$kStorageRoot/Documents'),
 ];
 
-/// Shows the DROM download popup as a box in the middle of the screen. It
+/// Shows the SDM download popup as a box in the middle of the screen. It
 /// floats up with a soft bounce, lists every detail of the file, lets the
 /// person rename it and pick where it is saved.
 /// Returns true when the download started.

@@ -111,7 +111,7 @@ class DownloadSettingsScreen extends StatelessWidget {
               secondary: const Icon(Icons.wifi_find_rounded),
               title: const T('Resume automatically'),
               subtitle: const T(
-                  'When the internet is lost or a download fails because of the network, DROM waits and continues by itself when the internet is back'),
+                  'When the internet is lost or a download fails because of the network, SDM waits and continues by itself when the internet is back'),
               value: dm.autoRetry,
               onChanged: dm.setAutoRetry,
             ),

@@ -4,12 +4,14 @@ import 'l10n.dart';
 import 'models.dart';
 import 'updater.dart';
 
-/// " · 2.4 MB · only the changed part" or " · 55 MB" (leading separator).
-String updateSizeLabel(UpdateInfo i) {
-  if (i.hasPatch) {
-    return ' · ${formatBytes(i.patchSize)} · ${tr('only the changed part')}';
-  }
-  return i.size > 0 ? ' · ${formatBytes(i.size)}' : '';
+/// "3.0 MB · 6 Nov 2026 · 4:20 PM": what really has to be downloaded and
+/// when this version came out. No version name, no notes.
+String updateSummary(UpdateInfo i) {
+  final parts = <String>[];
+  final bytes = i.downloadSize;
+  if (bytes > 0) parts.add(formatBytes(bytes));
+  if (i.published != null) parts.add(formatReleaseDate(i.published));
+  return parts.join(' · ');
 }
 
 String _left(int sec) {
@@ -152,90 +154,6 @@ String formatReleaseDate(DateTime? d) {
   return '${d.day} $m ${d.year} · $h12:$mm ${d.hour >= 12 ? 'PM' : 'AM'}';
 }
 
-/// Every published version with its date and what changed.
-class UpdateHistory extends StatelessWidget {
-  const UpdateHistory({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final up = UpdateChecker.instance;
-    final cs = Theme.of(context).colorScheme;
-    if (up.history.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 22, 4, 8),
-          child: T('Update history',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-        ),
-        for (final r in up.history)
-          Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Text('${tr('Build')} ${r.build}',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    const SizedBox(width: 8),
-                    if (r.build == up.build)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(tr('Installed'),
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: cs.onPrimaryContainer)),
-                      )
-                    else if (r.build > up.build)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF16A34A),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(tr('New'),
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white)),
-                      ),
-                    const Spacer(),
-                    Text(formatReleaseDate(r.date),
-                        style: TextStyle(
-                            fontSize: 12, color: cs.onSurfaceVariant)),
-                  ]),
-                  if (r.notes.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      r.notes
-                          .split('\n')
-                          .map((e) => e.trim().replaceFirst(RegExp(r'^[-*•]\s*'), ''))
-                          .where((e) => e.isNotEmpty)
-                          .take(8)
-                          .map((e) => '• $e')
-                          .join('\n'),
-                      style: const TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
 /// Banner on the home screen while a new version is available.
 class UpdateBanner extends StatelessWidget {
   const UpdateBanner({super.key});
@@ -266,7 +184,7 @@ class UpdateBanner extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                             color: cs.onPrimaryContainer)),
                     Text(
-                      '${info.name}${updateSizeLabel(info)}${info.published != null ? ' · ${formatReleaseDate(info.published)}' : ''}',
+                      updateSummary(info),
                       style: TextStyle(
                           fontSize: 12.5,
                           color: cs.onPrimaryContainer.withValues(alpha: 0.8)),
@@ -299,7 +217,7 @@ Future<void> maybePromptUpdate(BuildContext context) async {
         icon: const Icon(Icons.install_mobile_rounded, size: 32),
         title: const T('Update ready'),
         content: Text(
-          '${info.name}${updateSizeLabel(info)}\n\n'
+          '${updateSummary(info)}\n\n'
           '${tr('The new version is downloaded. Install it now?')}',
         ),
         actions: [
@@ -324,7 +242,7 @@ Future<void> maybePromptUpdate(BuildContext context) async {
       icon: const Icon(Icons.system_update_rounded, size: 32),
       title: const T('Update available'),
       content: Text(
-        '${info.name}${updateSizeLabel(info)}\n\n'
+        '${updateSummary(info)}\n\n'
         '${tr('Download and install the new version now?')}',
       ),
       actions: [
@@ -355,7 +273,7 @@ Future<void> maybeShowWhatsNew(BuildContext context) async {
     context: context,
     builder: (ctx) => AlertDialog(
       icon: const Icon(Icons.celebration_rounded, size: 32),
-      title: const T('DROM is updated'),
+      title: const T('SDM is updated'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 360),
         child: SingleChildScrollView(

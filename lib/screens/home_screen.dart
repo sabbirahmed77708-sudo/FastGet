@@ -451,7 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             )
           : AppBar(
-        title: Text(widget.embedded ? tr('Downloads') : 'DROM'),
+        title: Text(widget.embedded ? tr('Downloads') : 'SDM'),
         actions: [
           // Browser icon and the three-dot menu are always there.
           IconButton.filledTonal(

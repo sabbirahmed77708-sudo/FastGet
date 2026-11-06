@@ -13,7 +13,7 @@ import 'tabs_drawer.dart';
 import '../download_manager.dart';
 import '../l10n.dart';
 
-/// The DROM browser: toolbar, tabs drawer, WebViews, menu and find bar.
+/// The SDM browser: toolbar, tabs drawer, WebViews, menu and find bar.
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
 
@@ -69,7 +69,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
       if (started && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           behavior: SnackBarBehavior.floating,
-          content: const T('Added to DROM downloads'),
+          content: const T('Added to SDM downloads'),
           action: SnackBarAction(label: tr('View'), onPressed: _openDownloads),
         ));
       }

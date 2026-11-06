@@ -14,7 +14,7 @@ class PatchException implements Exception {
   String toString() => 'PatchException: $message';
 }
 
-/// Rebuilds a new file from the old file plus a small DROM patch, so an update
+/// Rebuilds a new file from the old file plus a small SDM patch, so an update
 /// only has to download what changed.
 ///
 /// Patch format ("DROMPAT1", made by tool/make_patches.py from a bsdiff):
@@ -32,7 +32,7 @@ Future<String> applyDromPatch(
   final patch = await File(patchPath).readAsBytes();
   if (patch.length < 40 ||
       String.fromCharCodes(patch.sublist(0, 8)) != 'DROMPAT1') {
-    throw const PatchException('not a DROM patch');
+    throw const PatchException('not a SDM patch');
   }
   final head = ByteData.sublistView(patch);
   final newSize = head.getInt64(8, Endian.little);

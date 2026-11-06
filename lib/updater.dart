@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'download_manager.dart';
 import 'patcher.dart';
 
-/// GitHub repository that publishes DROM builds as Releases.
+/// GitHub repository that publishes SDM builds as Releases.
 const String kRepo = 'sabbirahmed77708-sudo/FastGet';
 
 class UpdateInfo {
@@ -46,20 +46,11 @@ class UpdateInfo {
   int get downloadSize => hasPatch ? patchSize : size;
 }
 
-/// One published version for the update history in About.
-class ReleaseNote {
-  final int build;
-  final String name;
-  final String notes;
-  final DateTime? date;
-  const ReleaseNote(this.build, this.name, this.notes, this.date);
-}
-
 const MethodChannel _appCh = MethodChannel('drom/app');
 
 enum UpdatePhase { idle, downloading, patching, ready, error }
 
-/// Looks for a newer DROM build in the GitHub Releases of [kRepo].
+/// Looks for a newer SDM build in the GitHub Releases of [kRepo].
 ///
 /// The CI publishes every build as a release tagged `build-<number>`; the app
 /// compares that number with its own build number.
@@ -154,7 +145,7 @@ class UpdateChecker extends ChangeNotifier {
   double get progress =>
       totalBytes > 0 ? (received / totalBytes).clamp(0.0, 1.0).toDouble() : 0;
 
-  /// Downloads the new APK inside DROM and opens the installer when done.
+  /// Downloads the new APK inside SDM and opens the installer when done.
   ///
   /// With [auto] the installer is not opened by itself: the person is asked
   /// first (see [maybePromptUpdate]).
@@ -207,7 +198,7 @@ class UpdateChecker extends ChangeNotifier {
         receiveTimeout: const Duration(seconds: 60),
         followRedirects: true,
         maxRedirects: 8,
-        headers: {'User-Agent': 'DROM-app'},
+        headers: {'User-Agent': 'SDM-app'},
       ));
       // 1) the small patch: download only what changed and rebuild the APK
       var rebuilt = false;
@@ -342,7 +333,7 @@ class UpdateChecker extends ChangeNotifier {
         if (c == 'signature') {
           phase = UpdatePhase.error;
           updateError =
-              'This build was signed with a different key, so Android will not install it over the current app. Uninstall DROM once and install the new version; after that updates install normally.';
+              'This build was signed with a different key, so Android will not install it over the current app. Uninstall SDM once and install the new version; after that updates install normally.';
           notifyListeners();
           return;
         }
@@ -358,14 +349,14 @@ class UpdateChecker extends ChangeNotifier {
         }
       } catch (_) {}
       if (!await Permission.requestInstallPackages.isGranted) {
-        // opens "Install unknown apps" for DROM, once
+        // opens "Install unknown apps" for SDM, once
         await Permission.requestInstallPackages.request();
       }
       final r = await OpenFilex.open(path,
           type: 'application/vnd.android.package-archive');
       if (r.type != ResultType.done) {
         phase = UpdatePhase.error;
-        updateError = 'Could not open the installer. Allow "Install unknown apps" for DROM.';
+        updateError = 'Could not open the installer. Allow "Install unknown apps" for SDM.';
         notifyListeners();
       }
     } catch (_) {
@@ -427,43 +418,6 @@ class UpdateChecker extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Recent versions with their dates, for the About page.
-  List<ReleaseNote> history = [];
-  bool historyLoaded = false;
-
-  Future<void> loadHistory() async {
-    try {
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 15),
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'DROM-app',
-        },
-      ));
-      final r = await dio
-          .get<dynamic>('https://api.github.com/repos/$kRepo/releases?per_page=12');
-      final out = <ReleaseNote>[];
-      for (final e in (r.data as List? ?? const [])) {
-        final m = Map<String, dynamic>.from(e as Map);
-        if (m['draft'] == true) continue;
-        final tag = (m['tag_name'] ?? '').toString();
-        final mm = RegExp(r'(\d+)\s*$').firstMatch(tag);
-        if (mm == null) continue;
-        out.add(ReleaseNote(
-          int.parse(mm.group(1)!),
-          (m['name'] ?? tag).toString(),
-          (m['body'] ?? '').toString().trim(),
-          DateTime.tryParse((m['published_at'] ?? '').toString())?.toLocal(),
-        ));
-      }
-      out.sort((a, b) => b.build.compareTo(a.build));
-      history = out;
-      historyLoaded = true;
-      notifyListeners();
-    } catch (_) {}
-  }
-
   Future<void> check({bool silent = false}) async {
     if (checking) return;
     checking = true;
@@ -477,7 +431,7 @@ class UpdateChecker extends ChangeNotifier {
         receiveTimeout: const Duration(seconds: 15),
         headers: {
           'Accept': 'application/vnd.github+json',
-          'User-Agent': 'DROM-app',
+          'User-Agent': 'SDM-app',
         },
         validateStatus: (s) => s != null && (s < 400 || s == 404),
       ));

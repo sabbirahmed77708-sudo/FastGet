@@ -18,7 +18,7 @@ const String _ua =
     'Chrome/120.0 Mobile Safari/537.36';
 
 /// Result of inspecting a URL before downloading it.
-/// Hosts DROM does not download from (YouTube's terms forbid it).
+/// Hosts SDM does not download from (YouTube's terms forbid it).
 const unsupportedMessage =
     'YouTube links are not supported. Use YouTube Premium for offline videos.';
 

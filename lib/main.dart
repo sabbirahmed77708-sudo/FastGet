@@ -37,7 +37,7 @@ class FastGetApp extends StatelessWidget {
           key: ValueKey(L10n.instance.code),
           child: child ?? const SizedBox.shrink(),
         ),
-        title: 'DROM',
+        title: 'SDM',
         debugShowCheckedModeBanner: false,
         themeMode: BrowserController.instance.themeMode,
         theme: AppTheme.light(),

@@ -15,7 +15,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 
 /**
- * Keeps DROM alive while files are downloading (also after the app is closed)
+ * Keeps SDM alive while files are downloading (also after the app is closed)
  * and shows the download notifications: one per download (percent, MB, speed,
  * Pause / Resume) plus a summary with Pause all / Resume all.
  *
@@ -87,7 +87,7 @@ class DownloadService : Service() {
         }
 
         private fun fill(b: Bundle, m: Map<*, *>) {
-            b.putString("title", m["title"] as? String ?: "DROM")
+            b.putString("title", m["title"] as? String ?: "SDM")
             b.putString("text", m["text"] as? String ?: "")
             b.putInt("progress", (m["progress"] as? Number)?.toInt() ?: 0)
             b.putInt("max", (m["max"] as? Number)?.toInt() ?: 100)
@@ -154,7 +154,7 @@ class DownloadService : Service() {
 
     /** Must still call startForeground() if we were started with an empty update. */
     private fun ensureForeground() {
-        show(bundleOf(mapOf("title" to "DROM", "text" to "")))
+        show(bundleOf(mapOf("title" to "SDM", "text" to "")))
     }
 
     @Suppress("DEPRECATION")

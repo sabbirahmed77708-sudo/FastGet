@@ -21,7 +21,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
 
 /**
- * DROM's activity.
+ * SDM's activity.
  *
  * The Flutter engine (and with it the Dart download engine) is created once,
  * cached, and NOT destroyed when this activity closes. Together with
@@ -84,7 +84,7 @@ class MainActivity : FlutterActivity() {
     private fun setupChannels(ctx: Context, engine: FlutterEngine) {
         val messenger = engine.dartExecutor.binaryMessenger
 
-        // Links shared from other apps ("Share" -> DROM) and notification taps.
+        // Links shared from other apps ("Share" -> SDM) and notification taps.
         val share = MethodChannel(messenger, "drom/share")
         share.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -200,7 +200,7 @@ class MainActivity : FlutterActivity() {
             if (sound) defaults = defaults or Notification.DEFAULT_SOUND
             if (vibrate) defaults = defaults or Notification.DEFAULT_VIBRATE
 
-            val title = m["title"] as? String ?: "DROM"
+            val title = m["title"] as? String ?: "SDM"
             val text = m["text"] as? String ?: ""
             val builder = NotificationCompat.Builder(ctx, channel)
                 .setSmallIcon(
@@ -276,8 +276,8 @@ class MainActivity : FlutterActivity() {
         openKey(intent)?.let { shareChannel?.invokeMethod("onOpen", it) }
     }
 
-    // "Share" -> DROM gives the link as text; tapping a link and choosing
-    // DROM ("Open with") gives it as the intent data.
+    // "Share" -> SDM gives the link as text; tapping a link and choosing
+    // SDM ("Open with") gives it as the intent data.
     private fun sharedText(i: Intent?): String? {
         if (i == null) return null
         return when (i.action) {

@@ -1,4 +1,4 @@
-"""Adds what DROM needs to the generated Android project:
+"""Adds what SDM needs to the generated Android project:
 permissions, app label, the Share intent filter, the download foreground
 service, and our own MainActivity.kt / DownloadService.kt."""
 import glob
@@ -19,7 +19,7 @@ PERMS = [
     "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
     "android.permission.WAKE_LOCK",
     "android.permission.VIBRATE",
-    # installing an update that DROM downloaded itself
+    # installing an update that SDM downloaded itself
     "android.permission.REQUEST_INSTALL_PACKAGES",
 ]
 
@@ -51,7 +51,7 @@ if "requestLegacyExternalStorage" not in xml:
     xml = xml.replace("<application", '<application android:requestLegacyExternalStorage="true"', 1)
 
 # app name
-xml = re.sub(r'android:label="[^"]*"', 'android:label="DROM"', xml, count=1)
+xml = re.sub(r'android:label="[^"]*"', 'android:label="SDM"', xml, count=1)
 
 # Accept "Share" of text/links from other apps into the main activity.
 if "android.intent.action.SEND" not in xml:
@@ -66,7 +66,7 @@ if "android.intent.action.SEND" not in xml:
         sys.exit("AndroidManifest.xml has no </activity> tag")
     xml = xml.replace("</activity>", share_filter + "    </activity>", 1)
 
-# Links tapped in other apps: DROM shows up in "Open with" and can be chosen
+# Links tapped in other apps: SDM shows up in "Open with" and can be chosen
 # as the default browser (http / https, VIEW + BROWSABLE).
 if 'android:scheme="https"' not in xml:
     view_filter = (

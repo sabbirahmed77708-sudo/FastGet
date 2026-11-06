@@ -152,10 +152,8 @@ class _HomePageState extends State<HomePage> {
       Color(0xFF2563EB),
       Color(0xFFEF4444),
       Color(0xFFF59E0B),
-      Color(0xFF2563EB),
-      Color(0xFF10B981),
     ];
-    const letters = ['D', 'R', 'O', 'M'];
+    const letters = ['S', 'D', 'M'];
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

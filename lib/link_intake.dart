@@ -13,7 +13,7 @@ import 'models.dart';
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Handles links that arrive from outside the app: Android "Share" and
-/// links copied to the clipboard. Both end in the normal DROM download prompt,
+/// links copied to the clipboard. Both end in the normal SDM download prompt,
 /// which checks that the link is a real file before anything is downloaded.
 class LinkIntake with WidgetsBindingObserver {
   LinkIntake._();
@@ -89,9 +89,9 @@ class LinkIntake with WidgetsBindingObserver {
     return _fileExt.contains(last.split('.').last.toLowerCase());
   }
 
-  /// A link shared into the app ("Share" -> DROM).
+  /// A link shared into the app ("Share" -> SDM).
   /// A direct file link goes to the download prompt; any other web page opens
-  /// in the DROM browser (files started from that page are caught there).
+  /// in the SDM browser (files started from that page are caught there).
   Future<void> handleText(String text) async {
     final url = extractUrl(text);
     if (url == null) return;
@@ -102,7 +102,7 @@ class LinkIntake with WidgetsBindingObserver {
     }
   }
 
-  /// Opens [url] in a new DROM browser tab and brings the browser forward.
+  /// Opens [url] in a new SDM browser tab and brings the browser forward.
   void _openInBrowser(String url) {
     final nav = rootNavigatorKey.currentState;
     final ctx = rootNavigatorKey.currentContext;
