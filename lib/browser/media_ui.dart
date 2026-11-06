@@ -109,7 +109,7 @@ class _MediaBubbleState extends State<MediaBubble> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.download_rounded,
-                                color: dark ? Colors.white : cs.primary,
+                                color: const Color(0xFF5AB4FF),
                                 size: 20),
                             if (n > 1) ...[
                               const SizedBox(width: 4),
@@ -117,7 +117,7 @@ class _MediaBubbleState extends State<MediaBubble> {
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700,
-                                      color: dark ? Colors.white : cs.primary)),
+                                      color: const Color(0xFF5AB4FF))),
                             ],
                           ],
                         ),
