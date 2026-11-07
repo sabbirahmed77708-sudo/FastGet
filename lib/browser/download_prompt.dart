@@ -72,7 +72,7 @@ Future<bool> showDownloadPrompt(
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    transitionDuration: const Duration(milliseconds: 320),
+    transitionDuration: const Duration(milliseconds: 380),
     pageBuilder: (_, __, ___) => _PromptSheet(
         req: req, initialDir: dir, onLaunch: () => flying = true),
     // In: rises and grows a little while fading in. Out after "Download":
@@ -81,7 +81,7 @@ Future<bool> showDownloadPrompt(
     transitionBuilder: (context, anim, _, child) {
       final c = CurvedAnimation(
           parent: anim,
-          curve: Curves.easeOutCubic,
+          curve: const Cubic(0.16, 1, 0.3, 1), // fast start, long soft landing
           reverseCurve: Curves.easeInCubic);
       final cached = RepaintBoundary(child: child);
       return AnimatedBuilder(
@@ -91,7 +91,7 @@ Future<bool> showDownloadPrompt(
           final v = c.value;
           final out = flying && anim.status == AnimationStatus.reverse;
           final size = MediaQuery.sizeOf(ctx);
-          final scale = out ? 0.12 + 0.88 * v : 0.94 + 0.06 * v;
+          final scale = out ? 0.12 + 0.88 * v : 0.88 + 0.12 * v;
           final dx = out ? (1 - v) * size.width * 0.40 : 0.0;
           final dy = out
               ? -(1 - v) * size.height * 0.45
@@ -99,9 +99,12 @@ Future<bool> showDownloadPrompt(
           final opacity = out ? (v * 1.8).clamp(0.0, 1.0) : v;
           return Opacity(
             opacity: opacity,
-            child: Transform.translate(
-              offset: Offset(dx, dy),
-              child: Transform.scale(scale: scale, child: ch),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..translate(dx, dy)
+                ..scale(scale, scale),
+              child: ch,
             ),
           );
         },
@@ -185,7 +188,10 @@ class _PromptSheetState extends State<_PromptSheet> {
     final settled = Future.delayed(const Duration(milliseconds: 380));
     _probe = Future.wait<Object?>([
       settled,
-      _load().timeout(const Duration(seconds: 12),
+      // starts once the box has landed, so the opening has the CPU to itself
+      Future.delayed(const Duration(milliseconds: 360))
+          .then((_) => _load())
+          .timeout(const Duration(seconds: 12),
           onTimeout: () => const ProbeResult(-1, false, null, null)),
     ]).then((r) => r[1] as ProbeResult);
   }
@@ -742,36 +748,11 @@ class _Appear extends StatefulWidget {
   State<_Appear> createState() => _AppearState();
 }
 
-class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 420));
-  late final Animation<double> _a =
-      CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
-
+class _AppearState extends State<_Appear> {
+  // No per-block animation any more: moving the whole box is smooth, and extra
+  // fades running at the same time made the opening stutter.
   @override
-  void initState() {
-    super.initState();
-    // the blocks come in one after another, a few frames apart
-    Future.delayed(Duration(milliseconds: 60 + widget.index * 70), () {
-      if (mounted) _c.forward();
-    });
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => FadeTransition(
-        opacity: _a,
-        child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
-              .animate(_a),
-          child: widget.child,
-        ),
-      );
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The download arrow in the popup's header: it gently bobs, so the box feels alive.
@@ -786,8 +767,16 @@ class _BobIcon extends StatefulWidget {
 class _BobIconState extends State<_BobIcon>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 1100))
-    ..repeat(reverse: true);
+      vsync: this, duration: const Duration(milliseconds: 1100));
+
+  @override
+  void initState() {
+    super.initState();
+    // idle loops start after the box has landed (they repaint the whole box)
+    Future.delayed(const Duration(milliseconds: 450), () {
+      if (mounted) _c.repeat(reverse: true);
+    });
+  }
 
   @override
   void dispose() {
@@ -816,8 +805,15 @@ class _Skel extends StatefulWidget {
 
 class _SkelState extends State<_Skel> with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 900))
-    ..repeat(reverse: true);
+      vsync: this, duration: const Duration(milliseconds: 900));
+
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(const Duration(milliseconds: 450), () {
+      if (mounted) _c.repeat(reverse: true);
+    });
+  }
 
   @override
   void dispose() {
