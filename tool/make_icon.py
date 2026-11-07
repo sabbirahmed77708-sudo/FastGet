@@ -55,4 +55,10 @@ with sync_playwright() as p:
         pg.set_content(f'<body style="margin:0;background:transparent">{doc}</body>')
         pg.screenshot(path=f"assets/icon/{name}.png", omit_background=True)
     b.close()
+
+# About shows the logo at ~130 px: 512 px is plenty and keeps the app small
+from PIL import Image  # noqa: E402
+
+Image.open("assets/icon/logo.png").resize((512, 512), Image.LANCZOS).save(
+    "assets/icon/logo.png", optimize=True)
 print("icons written")

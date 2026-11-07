@@ -48,6 +48,10 @@ jobs:
       - name: Sign with the fixed key
         run: python3 tool/patch_signing.py
 
+      # works on older phones too (Android 5.0 and up)
+      - name: Lower the minimum Android version
+        run: python3 tool/patch_minsdk.py
+
       - run: flutter pub get
 
       - name: Generate launcher icons
@@ -65,8 +69,21 @@ jobs:
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       # build number = run number, so the app can tell which build is newer
+      # 32-bit and 64-bit phones in one APK (so one update file fits everyone);
+      # x86 is left out: it is only emulators, and it was a third of the size.
       - name: Build APK
-        run: flutter build apk --release --build-number=${{ github.run_number }}
+        run: >
+          flutter build apk --release
+          --build-number=${{ github.run_number }}
+          --target-platform android-arm,android-arm64
+          --split-debug-info=build/symbols
+
+      - name: Report APK size and minimum Android
+        run: |
+          ls -l build/app/outputs/flutter-apk/app-release.apk
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump badging build/app/outputs/flutter-apk/app-release.apk | grep -E "^sdkVersion|^targetSdkVersion|native-code"
+          unzip -l build/app/outputs/flutter-apk/app-release.apk | sort -rn | head -12
 
       - name: Name the APK
         run: cp build/app/outputs/flutter-apk/app-release.apk DROM.apk
