@@ -12,7 +12,6 @@ import '../update_ui.dart';
 import '../updater.dart';
 import '../browser/browser_controller.dart';
 import '../browser/browser_screen.dart';
-import '../browser/sheets.dart' show HistoryScreen;
 import 'app_settings_screen.dart';
 import '../l10n.dart';
 
@@ -349,7 +348,6 @@ class _HomeScreenState extends State<HomeScreen> {
         entry('lang', Icons.language_rounded, 'Language',
             note: L10n.instance.isBn ? 'বাংলা' : 'English'),
         const PopupMenuDivider(),
-        entry('history', Icons.history_rounded, 'History'),
         entry('share', Icons.share_rounded, 'Share app'),
         entry('settings', Icons.settings_outlined, 'Settings'),
         entry('about', Icons.info_outline_rounded, 'About',
@@ -377,14 +375,6 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 'lang':
         await showLanguageDialog(context);
-        break;
-      case 'history':
-        await Navigator.push<void>(
-          context,
-          MaterialPageRoute(
-              builder: (_) => HistoryScreen(
-                  browser: BrowserController.instance, fromHome: true)),
-        );
         break;
       case 'share':
         await shareApp();

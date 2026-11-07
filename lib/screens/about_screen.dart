@@ -57,7 +57,7 @@ class _AboutScreenState extends State<AboutScreen> {
               ),
               const SizedBox(height: 14),
               Center(
-                child: T('Fast download manager with a built-in browser.',
+                child: T('Speed download manager with a built-in browser.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: cs.onSurfaceVariant, height: 1.4)),
               ),

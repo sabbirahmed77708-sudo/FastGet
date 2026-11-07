@@ -80,8 +80,8 @@ const Map<String, String> _bn = {
   'Redownload this file?': 'ফাইলটি আবার ডাউনলোড করবেন?',
   'The partial or finished file will be deleted and downloaded again.':
       'আংশিক বা সম্পূর্ণ ফাইলটি মুছে নতুন করে ডাউনলোড হবে।',
-  'Fast download manager with a built-in browser.':
-      'বিল্ট-ইন ব্রাউজারসহ দ্রুত ডাউনলোড ম্যানেজার।',
+  'Speed download manager with a built-in browser.':
+      'বিল্ট-ইন ব্রাউজারসহ স্পিড ডাউনলোড ম্যানেজার।',
   // --- error messages
   'This link opens a web page, not a downloadable file':
       'এই লিংক একটি ওয়েবপেজ খোলে, ডাউনলোডযোগ্য ফাইল নয়',
