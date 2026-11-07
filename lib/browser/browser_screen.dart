@@ -221,9 +221,13 @@ class _BrowserScreenState extends State<BrowserScreen> {
         title: _urlBar(t, cs),
         actions: [
           IconButton(
-            tooltip: tr('Downloads'),
-            icon: const Icon(Icons.download_rounded),
-            onPressed: _openDownloads,
+            tooltip: tr('Home'),
+            icon: const Icon(Icons.home_rounded),
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              if (_editing) setState(() => _editing = false);
+              browser.goHome();
+            },
           ),
           IconButton(
             tooltip: tr('Menu'),
