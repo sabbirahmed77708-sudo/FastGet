@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:open_filex/open_filex.dart';
 
 import '../app_share.dart';
 import '../browser/download_prompt.dart';
 import '../download_manager.dart';
 import '../models.dart';
+import '../open_file.dart';
 import '../theme.dart';
 import '../update_ui.dart';
 import '../updater.dart';
@@ -280,15 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Opens a finished file; says so when it was deleted or moved.
-  Future<void> _openFile(DownloadItem d) async {
-    if (!File(d.savePath).existsSync()) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: T('File not found. It may have been deleted or moved.')));
-      return;
-    }
-    await OpenFilex.open(d.savePath);
-  }
+  Future<void> _openFile(DownloadItem d) => openDownloaded(d.savePath);
 
   Future<void> _redownload(DownloadItem d) async {
     if (d.downloaded > 0 || d.status == DlStatus.completed) {

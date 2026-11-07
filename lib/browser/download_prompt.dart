@@ -62,34 +62,49 @@ const List<(String, String)> _quickFolders = [
 /// Returns true when the download started.
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
-  // the save folder is a quick local lookup: have it ready so the popup opens
-  // complete, with nothing popping in afterwards
-  String? dir;
-  try {
-    dir = await DownloadManager.instance.preferredDir();
-  } catch (_) {}
-  if (!context.mounted) return false;
+  // the remembered folder is known without waiting, so the popup opens at once
+  // and complete
+  final dir = DownloadManager.instance.preferredDirSync;
+  // set when the download starts: the popup then flies up to the downloads icon
+  var flying = false;
   final result = await showGeneralDialog<bool>(
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Dismiss',
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    transitionDuration: const Duration(milliseconds: 380),
-    pageBuilder: (_, __, ___) => _PromptSheet(req: req, initialDir: dir),
-    // one calm motion: slide up + fade, no overshoot, drawn as a cached layer
+    transitionDuration: const Duration(milliseconds: 320),
+    pageBuilder: (_, __, ___) => _PromptSheet(
+        req: req, initialDir: dir, onLaunch: () => flying = true),
+    // In: rises and grows a little while fading in. Out after "Download":
+    // shrinks and flies to the downloads icon (top right). Out after Cancel:
+    // just sinks away. Drawn as one cached layer.
     transitionBuilder: (context, anim, _, child) {
       final c = CurvedAnimation(
           parent: anim,
           curve: Curves.easeOutCubic,
           reverseCurve: Curves.easeInCubic);
-      return FadeTransition(
-        opacity: c,
-        child: SlideTransition(
-          position:
-              Tween<Offset>(begin: const Offset(0, 0.14), end: Offset.zero)
-                  .animate(c),
-          child: RepaintBoundary(child: child),
-        ),
+      final cached = RepaintBoundary(child: child);
+      return AnimatedBuilder(
+        animation: c,
+        child: cached,
+        builder: (ctx, ch) {
+          final v = c.value;
+          final out = flying && anim.status == AnimationStatus.reverse;
+          final size = MediaQuery.sizeOf(ctx);
+          final scale = out ? 0.12 + 0.88 * v : 0.94 + 0.06 * v;
+          final dx = out ? (1 - v) * size.width * 0.40 : 0.0;
+          final dy = out
+              ? -(1 - v) * size.height * 0.45
+              : (1 - v) * size.height * 0.05;
+          final opacity = out ? (v * 1.8).clamp(0.0, 1.0) : v;
+          return Opacity(
+            opacity: opacity,
+            child: Transform.translate(
+              offset: Offset(dx, dy),
+              child: Transform.scale(scale: scale, child: ch),
+            ),
+          );
+        },
       );
     },
   );
@@ -99,7 +114,8 @@ Future<bool> showDownloadPrompt(
 class _PromptSheet extends StatefulWidget {
   final DownloadRequest req;
   final String? initialDir;
-  const _PromptSheet({required this.req, this.initialDir});
+  final VoidCallback? onLaunch;
+  const _PromptSheet({required this.req, this.initialDir, this.onLaunch});
 
   @override
   State<_PromptSheet> createState() => _PromptSheetState();
@@ -238,7 +254,10 @@ class _PromptSheetState extends State<_PromptSheet> {
       );
       // only a folder picked by hand becomes the new default
       if (_dir != null && _dirManual) await dm.setPreferredDir(_dir!);
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        widget.onLaunch?.call();
+        Navigator.pop(context, true);
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -331,8 +350,7 @@ class _PromptSheetState extends State<_PromptSheet> {
                             color: cs.primary.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child:
-                              Icon(Icons.download_rounded, color: cs.primary),
+                          child: _BobIcon(color: cs.primary),
                         ),
                         const SizedBox(width: 10),
                         const Expanded(
@@ -724,9 +742,67 @@ class _Appear extends StatefulWidget {
   State<_Appear> createState() => _AppearState();
 }
 
-class _AppearState extends State<_Appear> {
+class _AppearState extends State<_Appear> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 420));
+  late final Animation<double> _a =
+      CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+
   @override
-  Widget build(BuildContext context) => widget.child;
+  void initState() {
+    super.initState();
+    // the blocks come in one after another, a few frames apart
+    Future.delayed(Duration(milliseconds: 60 + widget.index * 70), () {
+      if (mounted) _c.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FadeTransition(
+        opacity: _a,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero)
+              .animate(_a),
+          child: widget.child,
+        ),
+      );
+}
+
+/// The download arrow in the popup's header: it gently bobs, so the box feels alive.
+class _BobIcon extends StatefulWidget {
+  final Color color;
+  const _BobIcon({required this.color});
+
+  @override
+  State<_BobIcon> createState() => _BobIconState();
+}
+
+class _BobIconState extends State<_BobIcon>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1100))
+    ..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+        animation: _c,
+        builder: (_, __) => Transform.translate(
+          offset: Offset(0, -2 + 4 * Curves.easeInOut.transform(_c.value)),
+          child: Icon(Icons.download_rounded, color: widget.color),
+        ),
+      );
 }
 
 /// Soft pulsing placeholder bar.

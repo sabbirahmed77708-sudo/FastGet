@@ -13,6 +13,10 @@ PERMS = [
     "android.permission.READ_EXTERNAL_STORAGE",
     "android.permission.WRITE_EXTERNAL_STORAGE",
     "android.permission.MANAGE_EXTERNAL_STORAGE",
+    # Android 13+: needed to open a downloaded video / song / picture
+    "android.permission.READ_MEDIA_VIDEO",
+    "android.permission.READ_MEDIA_AUDIO",
+    "android.permission.READ_MEDIA_IMAGES",
     "android.permission.POST_NOTIFICATIONS",
     # background downloads
     "android.permission.FOREGROUND_SERVICE",
