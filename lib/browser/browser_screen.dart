@@ -65,14 +65,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (_promptOpen || !mounted) return;
     _promptOpen = true;
     try {
-      final started = await showDownloadPrompt(context, r);
-      if (started && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: const T('Added to SDM downloads'),
-          action: SnackBarAction(label: tr('View'), onPressed: _openDownloads),
-        ));
-      }
+      await showDownloadPrompt(context, r);
     } finally {
       _promptOpen = false;
     }
