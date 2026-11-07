@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: the version is worked out from commits
 
       - uses: actions/setup-java@v4
         with:
@@ -68,12 +70,24 @@ jobs:
       - name: Analyze (errors fail the build, warnings do not)
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      # The version is automatic: the previous release's version, bumped by
+      # what the new commits say (feat: -> minor, fix/other -> patch, ! -> major).
+      - name: Work out the version
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(python3 tool/next_version.py ${{ github.run_number }})
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "App version: $V"
+
       # build number = run number, so the app can tell which build is newer
       # 32-bit and 64-bit phones in one APK (so one update file fits everyone);
       # x86 is left out: it is only emulators, and it was a third of the size.
       - name: Build APK
         run: >
           flutter build apk --release
+          --build-name=${{ steps.ver.outputs.version }}
           --build-number=${{ github.run_number }}
           --target-platform android-arm,android-arm64
           --split-debug-info=build/symbols
@@ -123,6 +137,6 @@ jobs:
           EXTRA=""
           if [ -f patches/DROM.sha256 ]; then EXTRA="$(ls patches/*)"; fi
           gh release create "build-${{ github.run_number }}" DROM.apk $EXTRA \
-            --title "SDM build ${{ github.run_number }}" \
+            --title "SDM ${{ steps.ver.outputs.version }} (build ${{ github.run_number }})" \
             --notes-file notes.txt \
             --latest
