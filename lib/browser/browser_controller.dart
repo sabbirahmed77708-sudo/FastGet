@@ -81,7 +81,14 @@ class BrowserController extends ChangeNotifier {
   SharedPreferences? _prefs;
   int _idSeed = 0;
 
-  BrowserTab get current => tabs[active];
+  BrowserTab get current {
+    // there is always one tab, even if saved tabs could not be read
+    if (tabs.isEmpty) {
+      tabs.add(BrowserTab(id: _nextId()));
+      active = 0;
+    }
+    return tabs[active.clamp(0, tabs.length - 1)];
+  }
 
   // ---------------------------------------------------------------- init
 

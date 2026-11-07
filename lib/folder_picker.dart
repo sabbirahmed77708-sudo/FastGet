@@ -8,7 +8,7 @@ import 'l10n.dart';
 /// Root of the phone's internal storage.
 const String kStorageRoot = '/storage/emulated/0';
 
-/// "/storage/emulated/0/Download/FastGet" -> "Internal storage/Download/FastGet"
+/// "/storage/emulated/0/Download/SDM" -> "Internal storage/Download/SDM"
 String prettyPath(String p) => p.startsWith(kStorageRoot)
     ? '${tr('Internal storage')}${p.substring(kStorageRoot.length)}'
     : p;
