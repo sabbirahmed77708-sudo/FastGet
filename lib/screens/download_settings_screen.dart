@@ -34,19 +34,23 @@ class DownloadSettingsScreen extends StatelessWidget {
             child: ListView(
               shrinkWrap: true,
               children: [
-                RadioListTile<int>(
-                  value: 0,
+                RadioGroup<int>(
                   groupValue: current,
-                  title: Text(tr(offLabel)),
-                  onChanged: (v) => Navigator.pop(ctx, 0),
+                  onChanged: (v) {
+                    if (v != null) Navigator.pop(ctx, v);
+                  },
+                  child: Column(children: [
+                    RadioListTile<int>(
+                      value: 0,
+                      title: Text(tr(offLabel)),
+                    ),
+                    for (final p in presets)
+                      RadioListTile<int>(
+                        value: p,
+                        title: Text('${formatBytes(p)}/s'),
+                      ),
+                  ]),
                 ),
-                for (final p in presets)
-                  RadioListTile<int>(
-                    value: p,
-                    groupValue: current,
-                    title: Text('${formatBytes(p)}/s'),
-                    onChanged: (v) => Navigator.pop(ctx, p),
-                  ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Row(children: [

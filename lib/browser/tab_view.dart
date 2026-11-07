@@ -233,6 +233,9 @@ class _WebHostState extends State<_WebHost> {
             : NavigationActionPolicy.CANCEL;
       },
       onCreateWindow: (c, action) async {
+        // a page that opens windows by itself (ad pop-ups) gets none; links the
+        // person taps (target=_blank) still open in a new tab
+        if (action.hasGesture == false) return false;
         browser.newTab(windowId: action.windowId);
         return true;
       },

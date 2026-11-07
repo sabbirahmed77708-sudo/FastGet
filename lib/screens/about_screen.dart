@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
-import '../models.dart';
 import '../update_ui.dart';
 import '../updater.dart';
 

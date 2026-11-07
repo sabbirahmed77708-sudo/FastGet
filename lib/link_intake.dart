@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import 'browser/browser_controller.dart';
 import 'browser/browser_screen.dart';
 import 'browser/download_prompt.dart';
 import 'download_manager.dart';
+import 'l10n.dart';
 import 'models.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -67,6 +69,16 @@ class LinkIntake with WidgetsBindingObserver {
   void _openFinished(String id) {
     for (final it in DownloadManager.instance.items) {
       if (it.id == id && it.status == DlStatus.completed) {
+        if (!File(it.savePath).existsSync()) {
+          final ctx = rootNavigatorKey.currentContext;
+          if (ctx != null) {
+            ScaffoldMessenger.maybeOf(ctx)?.showSnackBar(SnackBar(
+              behavior: SnackBarBehavior.floating,
+              content: Text(tr('File not found. It may have been deleted or moved.')),
+            ));
+          }
+          return;
+        }
         OpenFilex.open(it.savePath);
         return;
       }

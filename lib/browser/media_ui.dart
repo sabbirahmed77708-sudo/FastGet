@@ -33,7 +33,6 @@ class _MediaBubbleState extends State<MediaBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tab = widget.tab;
     final n = tab.media.length;

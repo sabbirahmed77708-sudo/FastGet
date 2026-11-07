@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -136,7 +137,9 @@ class BrowserController extends ChangeNotifier {
             showHome: (m['showHome'] as bool?) ?? url.isEmpty,
           ));
         }
-        active = (p.getInt('b_active') ?? 0).clamp(0, tabs.length - 1);
+        if (tabs.isNotEmpty) {
+          active = (p.getInt('b_active') ?? 0).clamp(0, tabs.length - 1);
+        }
       }
     } catch (_) {
       tabs.clear();
@@ -175,11 +178,30 @@ class BrowserController extends ChangeNotifier {
         'b_shortcuts', jsonEncode(shortcuts.map((e) => e.toJson()).toList()));
     await p.setString(
         'b_bookmarks', jsonEncode(bookmarks.map((e) => e.toJson()).toList()));
-    await p.setString('b_history',
-        jsonEncode(history.take(500).map((e) => e.toJson()).toList()));
-    await p.setString('b_icons',
-        jsonEncode(_icons.map((k, v) => MapEntry(k, base64Encode(v)))));
+    await _saveHistory();
+    await _saveIcons();
     await saveTabs();
+  }
+
+  Future<void> _saveHistory() async => _prefs?.setString('b_history',
+      jsonEncode(history.take(500).map((e) => e.toJson()).toList()));
+
+  Future<void> _saveIcons() async => _prefs?.setString('b_icons',
+      jsonEncode(_icons.map((k, v) => MapEntry(k, base64Encode(v)))));
+
+  // A page load touches history and the site icon: write each of them once,
+  // a moment later, instead of re-saving everything on every page.
+  Timer? _historyTimer;
+  Timer? _iconsTimer;
+
+  void _saveHistoryLater() {
+    _historyTimer?.cancel();
+    _historyTimer = Timer(const Duration(seconds: 2), _saveHistory);
+  }
+
+  void _saveIconsLater() {
+    _iconsTimer?.cancel();
+    _iconsTimer = Timer(const Duration(seconds: 3), _saveIcons);
   }
 
   Future<void> saveTabs() async {
@@ -438,18 +460,18 @@ class BrowserController extends ChangeNotifier {
 
   void rememberIcon(String url, Uint8List? icon) {
     final h = Uri.tryParse(url)?.host ?? '';
-    if (h.isEmpty || icon == null || icon.isEmpty || icon.length > 40000) {
+    if (h.isEmpty || icon == null || icon.isEmpty || icon.length > 24000) {
       return;
     }
     final old = _icons[h];
     if (old != null && old.length == icon.length) return;
     _icons.remove(h);
     _icons[h] = icon;
-    while (_icons.length > 150) {
+    while (_icons.length > 100) {
       _icons.remove(_icons.keys.first);
     }
     notifyListeners();
-    save();
+    _saveIconsLater();
   }
 
   void addHistory(BrowserTab t) {
@@ -464,7 +486,7 @@ class BrowserController extends ChangeNotifier {
         HistoryEntry(t.title.isNotEmpty ? t.title : t.host, u,
             DateTime.now().millisecondsSinceEpoch));
     if (history.length > 500) history.removeRange(500, history.length);
-    save();
+    _saveHistoryLater();
   }
 
   Future<void> removeHistory(Iterable<HistoryEntry> list) async {

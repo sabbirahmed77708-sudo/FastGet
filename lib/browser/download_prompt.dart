@@ -49,7 +49,7 @@ String _typeLabel(String name, String? mime) {
 
 /// Quick save locations shown as chips in the popup.
 const List<(String, String)> _quickFolders = [
-  ('SDM folder', '$kStorageRoot/Download/FastGet'),
+  ('SDM folder', ''), // the real path comes from the download manager
   ('Downloads', '$kStorageRoot/Download'),
   ('Movies', '$kStorageRoot/Movies'),
   ('Music', '$kStorageRoot/Music'),
@@ -124,6 +124,7 @@ class _PromptSheetState extends State<_PromptSheet> {
 
   bool get _autoSorted =>
       !_dirManual && DownloadManager.instance.sortByType && _dir != null;
+  ProbeResult? _info; // what the file check found (reused when starting)
   bool _busy = false;
   bool _copied = false;
   String? _error;
@@ -188,6 +189,7 @@ class _PromptSheetState extends State<_PromptSheet> {
     final headers = await _headers();
     final info =
         await DownloadManager.instance.inspect(widget.req.url, headers: headers);
+    _info = info;
     // the server's real file name wins, unless the person already typed one
     final real = info.fileName;
     if (!_nameEdited && real != null && real.isNotEmpty && mounted) {
@@ -232,6 +234,7 @@ class _PromptSheetState extends State<_PromptSheet> {
         headers: headers,
         suggestedName: name,
         dirPath: _effectiveDir,
+        probe: _info, // already checked: no second round trip to the server
       );
       // only a folder picked by hand becomes the new default
       if (_dir != null && _dirManual) await dm.setPreferredDir(_dir!);
@@ -635,7 +638,10 @@ class _PromptSheetState extends State<_PromptSheet> {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              for (final q in _quickFolders)
+              for (final q in [
+                for (final f in _quickFolders)
+                  (f.$1, f.$2.isEmpty ? DownloadManager.instance.defaultDirSync : f.$2),
+              ])
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: ChoiceChip(

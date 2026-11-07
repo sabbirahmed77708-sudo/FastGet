@@ -70,6 +70,11 @@ class _Run {
   /// Set when the download itself failed and the other pieces were stopped
   /// (as opposed to the person pausing / removing it).
   bool failed = false;
+
+  /// The error that made [failed] true: the stopped pieces only report a
+  /// cancel, and this keeps the real cause for the retry / failure message.
+  Object? failure;
+  StackTrace? failureTrace;
 }
 
 class DownloadManager extends ChangeNotifier {
@@ -247,7 +252,19 @@ class DownloadManager extends ChangeNotifier {
   }
 
   /// Every few seconds: pause on lost internet, resume when it is back.
+  bool _netBusy = false;
+
   Future<void> _netTick() async {
+    if (_netBusy) return; // the previous check (up to ~6 s) is still running
+    _netBusy = true;
+    try {
+      await _netCheck();
+    } finally {
+      _netBusy = false;
+    }
+  }
+
+  Future<void> _netCheck() async {
     if (!autoRetry) return;
     final running = items.any((e) => e.status == DlStatus.downloading);
     if (!running && _waitingForNet.isEmpty) {
@@ -358,7 +375,9 @@ class DownloadManager extends ChangeNotifier {
         'items', jsonEncode(items.map((e) => e.toJson()).toList()));
   }
 
-  /// Download folder: Downloads/FastGet (falls back to the app's own folder without permission)
+  /// Download folder: Download/SDM (falls back to the app's own folder without
+  /// permission). A folder from the old name "FastGet" is kept if it exists, so
+  /// earlier downloads stay together with new ones.
   Future<String> downloadDir() async {
     if (_dir != null) return _dir!;
     String? path;
@@ -370,7 +389,7 @@ class DownloadManager extends ChangeNotifier {
         if (s2.isGranted) st = s2;
       }
       if (st.isGranted) {
-        final d = Directory('/storage/emulated/0/Download/FastGet');
+        final d = await _appFolder('/storage/emulated/0/Download');
         try {
           await d.create(recursive: true);
           path = d.path;
@@ -380,16 +399,32 @@ class DownloadManager extends ChangeNotifier {
     if (path == null) {
       final base = await getExternalStorageDirectory() ??
           await getApplicationDocumentsDirectory();
-      final d = Directory('${base.path}/FastGet');
+      final d = await _appFolder(base.path);
       await d.create(recursive: true);
       path = d.path;
     }
     return _dir = path;
   }
 
+  static const _folderName = 'SDM';
+  static const _legacyFolderName = 'FastGet';
+
+  Future<Directory> _appFolder(String root) async {
+    final old = Directory('$root/$_legacyFolderName');
+    try {
+      if (await old.exists()) return old;
+    } catch (_) {}
+    return Directory('$root/$_folderName');
+  }
+
+  /// The default download folder as far as it is known right now (before the
+  /// first download it is the usual place).
+  String get defaultDirSync =>
+      _dir ?? '/storage/emulated/0/Download/$_folderName';
+
   // ----------------------------------------------------------------- add
 
-  /// Folder last chosen in the download popup; falls back to Download/FastGet.
+  /// Folder last chosen in the download popup; falls back to the default folder.
   Future<String> preferredDir() async {
     final saved = _prefs?.getString('save_dir');
     if (saved != null && saved.isNotEmpty) {
@@ -407,7 +442,8 @@ class DownloadManager extends ChangeNotifier {
   Future<DownloadItem> addUrl(String rawUrl,
       {Map<String, String>? headers,
       String? suggestedName,
-      String? dirPath}) async {
+      String? dirPath,
+      ProbeResult? probe}) async {
     final url = rawUrl.trim();
     final uri = Uri.tryParse(url);
     if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
@@ -423,13 +459,13 @@ class DownloadManager extends ChangeNotifier {
       }
     }
     final hdrs = headers ?? const <String, String>{};
-    final probe = await inspect(url, headers: hdrs);
+    final info = probe ?? await inspect(url, headers: hdrs);
     var baseName = (suggestedName != null && suggestedName.trim().isNotEmpty
             ? _sanitize(suggestedName)
             : null) ??
-        probe.fileName ??
+        info.fileName ??
         _nameFromUrl(uri);
-    if (probe.hls) {
+    if (info.hls) {
       baseName = baseName.replaceAll(RegExp(r'\.m3u8$', caseSensitive: false), '');
       if (!baseName.contains('.')) baseName = '$baseName.ts';
     }
@@ -443,8 +479,8 @@ class DownloadManager extends ChangeNotifier {
       }
     }
     final name = _uniqueName(dir, baseName);
-    if (probe.contentType != null &&
-        _isHtmlType(probe.contentType) &&
+    if (info.contentType != null &&
+        _isHtmlType(info.contentType) &&
         !_nameIsWebPage(name)) {
       throw 'This link opens a web page, not a downloadable file';
     }
@@ -453,9 +489,9 @@ class DownloadManager extends ChangeNotifier {
       url: url,
       fileName: name,
       dirPath: dir,
-      total: probe.total,
-      rangeSupported: probe.range,
-      hls: probe.hls,
+      total: info.total,
+      rangeSupported: info.range,
+      hls: info.hls,
       headers: hdrs,
     );
     items.insert(0, item);
@@ -643,7 +679,7 @@ class DownloadManager extends ChangeNotifier {
 
   /// Folder chosen as default (shown in settings).
   String get preferredDirSync =>
-      _prefs?.getString('save_dir') ?? '/storage/emulated/0/Download/FastGet';
+      _prefs?.getString('save_dir') ?? defaultDirSync;
 
   /// Removes several downloads at once.
   Future<void> removeMany(Iterable<DownloadItem> list,
@@ -788,21 +824,30 @@ class DownloadManager extends ChangeNotifier {
 
     // If one piece fails, stop the others at once (and wait for them), so that
     // nothing keeps writing to the part files while a retry starts over them.
-    await Future.wait(
-      [
-        for (var i = 0; i < kSegments; i++)
-          _downloadSegment(item, run, i, starts[i], ends[i]).catchError(
-            (Object e, StackTrace st) {
-              if (!run.token.isCancelled) {
-                run.failed = true;
-                run.token.cancel('piece failed');
-              }
-              Error.throwWithStackTrace(e, st);
-            },
-          ),
-      ],
-      eagerError: false,
-    );
+    try {
+      await Future.wait(
+        [
+          for (var i = 0; i < kSegments; i++)
+            _downloadSegment(item, run, i, starts[i], ends[i]).catchError(
+              (Object e, StackTrace st) {
+                if (!run.token.isCancelled) {
+                  run.failed = true;
+                  run.failure = e;
+                  run.failureTrace = st;
+                  run.token.cancel('piece failed');
+                }
+                Error.throwWithStackTrace(e, st);
+              },
+            ),
+        ],
+        eagerError: false,
+      );
+    } catch (e, st) {
+      // report the piece that really failed, not a stopped piece's cancel
+      final real = run.failure;
+      if (real != null) Error.throwWithStackTrace(real, run.failureTrace ?? st);
+      rethrow;
+    }
 
     // every piece must be complete before they are joined
     for (var i = 0; i < kSegments; i++) {
@@ -1176,8 +1221,11 @@ class DownloadManager extends ChangeNotifier {
     return n.isEmpty ? 'download_${DateTime.now().millisecondsSinceEpoch}' : n;
   }
 
-  String _sanitize(String n) =>
-      n.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
+  String _sanitize(String n) {
+    final s = n.replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1f]'), '_').trim();
+    // "." and ".." would point at a folder, not a file
+    return RegExp(r'^\.+$').hasMatch(s) ? '_' : s;
+  }
 
   String _uniqueName(String dir, String name) {
     final taken = items.map((e) => e.fileName).toSet();

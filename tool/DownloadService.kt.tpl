@@ -146,7 +146,13 @@ class DownloadService : Service() {
                 intent?.getStringExtra(EXTRA_KEY)?.let { onAction?.invoke("resume:$it") }
             ACTION_UPDATE -> {
                 val extras = intent?.extras
-                if (extras != null) show(extras) else ensureForeground()
+                try {
+                    if (extras != null) show(extras) else ensureForeground()
+                } catch (e: Exception) {
+                    // e.g. Android refuses a foreground service from the background:
+                    // downloads go on in the app process, only the notification is lost
+                    stopSelf()
+                }
             }
         }
         return START_NOT_STICKY
