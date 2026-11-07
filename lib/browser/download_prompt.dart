@@ -63,12 +63,12 @@ const List<(String, String)> _quickFolders = [
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
   // The file check starts BEFORE the popup opens. The popup waits a moment for
-  // it (at most 1.8 s), so it opens already complete: real name, size, type.
+  // it (at most 0.9 s), so it opens already complete: real name, size, type.
   // On a slow server it opens anyway and fills in when the answer arrives.
   final pre = _preload(req);
   ProbeResult? ready;
   try {
-    ready = await pre.timeout(const Duration(milliseconds: 1800));
+    ready = await pre.timeout(const Duration(milliseconds: 900));
   } catch (_) {}
   if (!context.mounted) return false;
   // the remembered folder is known without waiting, so the popup opens at once
@@ -136,8 +136,10 @@ Future<Map<String, String>> _buildHeaders(DownloadRequest r) async {
     h['Referer'] = r.referer!;
   }
   try {
-    final cookies =
-        await CookieManager.instance().getCookies(url: WebUri(r.url));
+    // never let the cookie lookup hold the popup back
+    final cookies = await CookieManager.instance()
+        .getCookies(url: WebUri(r.url))
+        .timeout(const Duration(milliseconds: 400));
     if (cookies.isNotEmpty) {
       h['Cookie'] = cookies.map((c) => '${c.name}=${c.value}').join('; ');
     }
