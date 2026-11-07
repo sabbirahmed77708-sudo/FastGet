@@ -7,7 +7,6 @@ import 'browser/browser_controller.dart';
 import 'browser/browser_screen.dart';
 import 'browser/download_prompt.dart';
 import 'download_manager.dart';
-import 'l10n.dart';
 import 'models.dart';
 import 'open_file.dart';
 
