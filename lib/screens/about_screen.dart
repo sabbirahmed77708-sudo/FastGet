@@ -30,10 +30,9 @@ class _AboutScreenState extends State<AboutScreen> {
       body: ListenableBuilder(
         listenable: Listenable.merge([up, L10n.instance]),
         builder: (context, _) {
-          final ver = up.version.isEmpty
-              ? ''
-              : '${tr('Version')} ${up.version}'
-                  '${up.build > 0 ? ' (${up.build})' : ''}';
+          // only the version; the build number stays inside the app
+          final ver =
+              up.version.isEmpty ? '' : '${tr('Version')} ${up.version}';
           return ListView(
             padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
             children: [
