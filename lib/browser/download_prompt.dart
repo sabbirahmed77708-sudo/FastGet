@@ -62,6 +62,15 @@ const List<(String, String)> _quickFolders = [
 /// Returns true when the download started.
 Future<bool> showDownloadPrompt(
     BuildContext context, DownloadRequest req) async {
+  // The file check starts BEFORE the popup opens. The popup waits a moment for
+  // it (at most 1.8 s), so it opens already complete: real name, size, type.
+  // On a slow server it opens anyway and fills in when the answer arrives.
+  final pre = _preload(req);
+  ProbeResult? ready;
+  try {
+    ready = await pre.timeout(const Duration(milliseconds: 1800));
+  } catch (_) {}
+  if (!context.mounted) return false;
   // the remembered folder is known without waiting, so the popup opens at once
   // and complete
   final dir = DownloadManager.instance.preferredDirSync;
@@ -74,7 +83,11 @@ Future<bool> showDownloadPrompt(
     barrierColor: Colors.black.withValues(alpha: 0.55),
     transitionDuration: const Duration(milliseconds: 380),
     pageBuilder: (_, __, ___) => _PromptSheet(
-        req: req, initialDir: dir, onLaunch: () => flying = true),
+        req: req,
+        initialDir: dir,
+        pre: pre,
+        ready: ready,
+        onLaunch: () => flying = true),
     // In: rises and grows a little while fading in. Out after "Download":
     // shrinks and flies to the downloads icon (top right). Out after Cancel:
     // just sinks away. Drawn as one cached layer.
@@ -114,11 +127,49 @@ Future<bool> showDownloadPrompt(
   return result == true;
 }
 
+Future<Map<String, String>> _buildHeaders(DownloadRequest r) async {
+  final h = <String, String>{};
+  if (r.userAgent != null && r.userAgent!.isNotEmpty) {
+    h['User-Agent'] = r.userAgent!;
+  }
+  if (r.referer != null && r.referer!.startsWith('http')) {
+    h['Referer'] = r.referer!;
+  }
+  try {
+    final cookies =
+        await CookieManager.instance().getCookies(url: WebUri(r.url));
+    if (cookies.isNotEmpty) {
+      h['Cookie'] = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+    }
+  } catch (_) {}
+  return h;
+}
+
+/// Checks the file (name, size, resume support) with the same headers the
+/// download will use. Never throws: a failed check is reported as unknown.
+Future<ProbeResult> _preload(DownloadRequest r) async {
+  try {
+    final headers = await _buildHeaders(r);
+    return await DownloadManager.instance
+        .inspect(r.url, headers: headers)
+        .timeout(const Duration(seconds: 12));
+  } catch (_) {
+    return const ProbeResult(-1, false, null, null);
+  }
+}
+
 class _PromptSheet extends StatefulWidget {
   final DownloadRequest req;
   final String? initialDir;
+  final Future<ProbeResult> pre;
+  final ProbeResult? ready; // the check already finished before opening
   final VoidCallback? onLaunch;
-  const _PromptSheet({required this.req, this.initialDir, this.onLaunch});
+  const _PromptSheet(
+      {required this.req,
+      this.initialDir,
+      required this.pre,
+      this.ready,
+      this.onLaunch});
 
   @override
   State<_PromptSheet> createState() => _PromptSheetState();
@@ -148,25 +199,6 @@ class _PromptSheetState extends State<_PromptSheet> {
   bool _copied = false;
   String? _error;
 
-  Future<Map<String, String>> _headers() async {
-    final h = <String, String>{};
-    final r = widget.req;
-    if (r.userAgent != null && r.userAgent!.isNotEmpty) {
-      h['User-Agent'] = r.userAgent!;
-    }
-    if (r.referer != null && r.referer!.startsWith('http')) {
-      h['Referer'] = r.referer!;
-    }
-    try {
-      final cookies =
-          await CookieManager.instance().getCookies(url: WebUri(r.url));
-      if (cookies.isNotEmpty) {
-        h['Cookie'] = cookies.map((c) => '${c.name}=${c.value}').join('; ');
-      }
-    } catch (_) {}
-    return h;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -182,18 +214,17 @@ class _PromptSheetState extends State<_PromptSheet> {
             : (given.isNotEmpty ? given : fromUrl));
     _dir = widget.initialDir;
     if (_dir == null) _initDir();
-    // The file check starts at once (so it is ready as early as possible) but
-    // its answer is shown only after the popup has finished moving, so nothing
-    // rebuilds mid-animation. A slow server never blocks the popup.
-    final settled = Future.delayed(const Duration(milliseconds: 380));
-    _probe = Future.wait<Object?>([
-      settled,
-      // starts once the box has landed, so the opening has the CPU to itself
-      Future.delayed(const Duration(milliseconds: 360))
-          .then((_) => _load())
-          .timeout(const Duration(seconds: 12),
-          onTimeout: () => const ProbeResult(-1, false, null, null)),
-    ]).then((r) => r[1] as ProbeResult);
+    final ready = widget.ready;
+    if (ready != null) {
+      _applyInfo(ready);
+      _probe = Future.value(ready);
+    } else {
+      // slow server: show the popup now, fill in when the check finishes
+      _probe = widget.pre.then((info) {
+        _applyInfo(info);
+        return info;
+      });
+    }
   }
 
   @override
@@ -207,17 +238,13 @@ class _PromptSheetState extends State<_PromptSheet> {
     if (mounted) setState(() => _dir = d);
   }
 
-  Future<ProbeResult> _load() async {
-    final headers = await _headers();
-    final info =
-        await DownloadManager.instance.inspect(widget.req.url, headers: headers);
+  void _applyInfo(ProbeResult info) {
     _info = info;
     // the server's real file name wins, unless the person already typed one
     final real = info.fileName;
     if (!_nameEdited && real != null && real.isNotEmpty && mounted) {
       _nameCtrl.text = real;
     }
-    return info;
   }
 
   Future<void> _chooseFolder() async {
@@ -249,7 +276,7 @@ class _PromptSheetState extends State<_PromptSheet> {
       _error = null;
     });
     try {
-      final headers = await _headers();
+      final headers = await _buildHeaders(widget.req);
       final dm = DownloadManager.instance;
       await dm.addUrl(
         widget.req.url,
@@ -280,9 +307,11 @@ class _PromptSheetState extends State<_PromptSheet> {
     final r = widget.req;
     return FutureBuilder<ProbeResult>(
       future: _probe,
+      initialData: widget.ready,
       builder: (context, snap) {
-        final loading = snap.connectionState != ConnectionState.done;
-        final info = snap.data;
+        final loading =
+            widget.ready == null && snap.connectionState != ConnectionState.done;
+        final info = snap.data ?? widget.ready;
         final name = _nameCtrl.text;
         final size =
             (r.size != null && r.size! > 0) ? r.size! : (info?.total ?? -1);
